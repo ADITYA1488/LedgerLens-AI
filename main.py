@@ -1,8 +1,10 @@
-
+from functools import lru_cache
 from pathlib import Path
+import os
 
 import pandas as pd
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 
 from forecasting import forecast_financial_series
 from forecasting_schema import (
@@ -12,20 +14,23 @@ from forecasting_schema import (
     ForecastResponse
 )
 
-app = FastAPI(
-    title="LedgerLens AI API",
-    description="Financial forecasting and working-capital intelligence",
-    version="0.2.0"
-)
+PROJECT_ROOT = Path(
+    os.getenv("LEDGERLENS_PROJECT_ROOT", Path.cwd())
+).resolve()
 
 DATA_ROOT = Path(
-    "/kaggle/input/datasets/adityashrinet/"
-    "ledgerlens-msme-working-capital/"
+    os.getenv(
+        "LEDGERLENS_DATA_DIR",
+        "/kaggle/input/datasets/adityashrinet/"
+        "ledgerlens-msme-working-capital/"
+    )
 )
 
 SELECTION_FILE = Path(
-    "/kaggle/working/ledgerlens_experiments/"
-    "selected_forecasting_models.csv"
+    os.getenv(
+        "LEDGERLENS_SELECTION_FILE",
+        str(PROJECT_ROOT / "experiments" / "selected_forecasting_models.csv")
+    )
 )
 
 TARGETS = {
@@ -39,13 +44,77 @@ MODEL_MAP = {
     "Moving Average": "moving_average_3"
 }
 
+SUPPORTED_ENTITIES = {"LOG", "MFG", "RET"}
+
+app = FastAPI(
+    title="LedgerLens AI API",
+    description="Financial forecasting and working-capital intelligence",
+    version="0.3.0"
+)
+
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=[
+        "http://localhost:5500",
+        "http://127.0.0.1:5500",
+        "http://localhost:8000",
+        "http://127.0.0.1:8000"
+    ],
+    allow_credentials=False,
+    allow_methods=["GET", "OPTIONS"],
+    allow_headers=["*"]
+)
+
+
+@lru_cache(maxsize=1)
+def load_monthly_data():
+    if not DATA_ROOT.exists():
+        raise FileNotFoundError(
+            f"Dataset directory not found: {DATA_ROOT}"
+        )
+
+    files = list(
+        DATA_ROOT.rglob("DD-WCP-003_FactMonthlyPL.csv")
+    )
+
+    if not files:
+        raise FileNotFoundError(
+            "DD-WCP-003_FactMonthlyPL.csv not found."
+        )
+
+    pl = pd.read_csv(files[0])
+    pl["MonthEnd"] = pd.to_datetime(pl["MonthEnd"])
+
+    return pl
+
+
+@lru_cache(maxsize=1)
+def load_model_selection():
+    if not SELECTION_FILE.exists():
+        raise FileNotFoundError(
+            f"Model selection file not found: {SELECTION_FILE}"
+        )
+
+    selection = pd.read_csv(SELECTION_FILE)
+
+    required = {"Entity", "Target", "Model"}
+
+    if not required.issubset(selection.columns):
+        raise ValueError(
+            f"Model selection file must contain {required}."
+        )
+
+    return selection
+
 
 @app.get("/health")
 def health():
     return {
         "status": "healthy",
         "service": "LedgerLens AI",
-        "version": "0.2.0"
+        "version": "0.3.0",
+        "dataset_configured": DATA_ROOT.exists(),
+        "selection_configured": SELECTION_FILE.exists()
     }
 
 
@@ -58,22 +127,17 @@ def get_forecast(entity: str, target: str):
     entity = entity.upper()
     target_key = target.lower()
 
-    if entity not in ["LOG", "MFG", "RET"]:
+    if entity not in SUPPORTED_ENTITIES:
         raise HTTPException(400, "Unsupported entity.")
 
     if target_key not in TARGETS:
         raise HTTPException(400, "Unsupported financial target.")
 
-    if not DATA_ROOT.exists() or not SELECTION_FILE.exists():
-        raise HTTPException(
-            500,
-            "Dataset or model selection artifact is unavailable."
-        )
-
-    target_column = TARGETS[target_key]
-
     try:
-        selection = pd.read_csv(SELECTION_FILE)
+        pl = load_monthly_data()
+        selection = load_model_selection()
+
+        target_column = TARGETS[target_key]
 
         selected = selection[
             (selection["Entity"] == entity) &
@@ -81,20 +145,18 @@ def get_forecast(entity: str, target: str):
         ]
 
         if len(selected) != 1:
-            raise ValueError("Model selection not found or ambiguous.")
+            raise ValueError(
+                f"Expected one model selection for {entity}/{target_column}."
+            )
 
         selected_model = selected.iloc[0]["Model"]
+
+        if selected_model not in MODEL_MAP:
+            raise ValueError(
+                f"Unsupported selected model: {selected_model}"
+            )
+
         method = MODEL_MAP[selected_model]
-
-        files = list(
-            DATA_ROOT.rglob("DD-WCP-003_FactMonthlyPL.csv")
-        )
-
-        if not files:
-            raise FileNotFoundError("Monthly P&L dataset not found.")
-
-        pl = pd.read_csv(files[0])
-        pl["MonthEnd"] = pd.to_datetime(pl["MonthEnd"])
 
         series = (
             pl[pl["EntityCode"] == entity]
@@ -132,11 +194,90 @@ def get_forecast(entity: str, target: str):
             )
         )
 
+    except FileNotFoundError as exc:
+        raise HTTPException(503, str(exc))
+
     except HTTPException:
         raise
 
     except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+
+
+@app.get("/analytics/{entity}")
+def get_entity_analytics(entity: str):
+
+    entity = entity.upper()
+
+    if entity not in SUPPORTED_ENTITIES:
         raise HTTPException(
-            status_code=500,
-            detail=str(exc)
+            status_code=400,
+            detail="Unsupported entity."
         )
+
+    try:
+        pl = load_monthly_data()
+
+        entity_data = (
+            pl[pl["EntityCode"] == entity]
+            .sort_values("MonthEnd")
+            .copy()
+        )
+
+        if entity_data.empty:
+            raise ValueError(f"No data found for {entity}.")
+
+        entity_data["GrossProfit"] = (
+            entity_data["Revenue"] - entity_data["CostOfSales"]
+        )
+
+        entity_data["GrossMarginPct"] = (
+            entity_data["GrossProfit"] /
+            entity_data["Revenue"].replace(0, float("nan"))
+        ) * 100
+
+        latest = entity_data.iloc[-1]
+
+        history = entity_data.tail(12)
+
+        return {
+            "entity": entity,
+            "dataset": "DD-WCP-003",
+            "dataset_type": "synthetic",
+            "currency": "USD",
+            "latest_period": str(latest["MonthEnd"].date()),
+            "kpis": {
+                "revenue": float(latest["Revenue"]),
+                "cost_of_sales": float(latest["CostOfSales"]),
+                "supplier_invoices": float(latest["SupplierInvoices"]),
+                "gross_profit": float(latest["GrossProfit"]),
+                "gross_margin_pct": (
+                    None if pd.isna(latest["GrossMarginPct"])
+                    else float(latest["GrossMarginPct"])
+                )
+            },
+            "history": [
+                {
+                    "period": str(row["MonthEnd"].date()),
+                    "revenue": float(row["Revenue"]),
+                    "cost_of_sales": float(row["CostOfSales"]),
+                    "supplier_invoices": float(row["SupplierInvoices"]),
+                    "gross_profit": float(row["GrossProfit"]),
+                    "gross_margin_pct": (
+                        None if pd.isna(row["GrossMarginPct"])
+                        else float(row["GrossMarginPct"])
+                    )
+                }
+                for _, row in history.iterrows()
+            ]
+        }
+
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))

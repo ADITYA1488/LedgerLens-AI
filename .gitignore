@@ -20,3 +20,6 @@ outputs/
 # Keep reproducible experiment summaries
 !experiments/
 !experiments/*.csv
+
+# Allow safe environment template
+!.env.example

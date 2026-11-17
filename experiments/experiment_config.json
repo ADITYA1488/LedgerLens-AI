@@ -1,0 +1,25 @@
+{
+    "experiment": "multi_entity_monthly_forecasting",
+    "dataset": "DD-WCP-003",
+    "dataset_type": "synthetic",
+    "currency": "USD",
+    "training_period": "2023-01 to 2025-11",
+    "validation_period": "2025-12 to 2026-09",
+    "evaluation": "expanding_window_one_step_ahead",
+    "selection_metric": "MAE",
+    "entities": [
+        "LOG",
+        "MFG",
+        "RET"
+    ],
+    "targets": [
+        "Revenue",
+        "CostOfSales",
+        "SupplierInvoices"
+    ],
+    "candidate_models": [
+        "Holt-Winters",
+        "Moving Average"
+    ],
+    "selected_configurations": 9
+}

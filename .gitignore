@@ -16,3 +16,7 @@ venv/
 data/
 models/
 outputs/
+
+# Keep reproducible experiment summaries
+!experiments/
+!experiments/*.csv

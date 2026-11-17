@@ -33,6 +33,15 @@ SELECTION_FILE = Path(
     )
 )
 
+
+
+WORKING_CAPITAL_FILE = Path(
+    os.getenv(
+        "LEDGERLENS_WC_FILE",
+        str(PROJECT_ROOT / "data" / "working_capital_monthly.csv")
+    )
+)
+
 TARGETS = {
     "revenue": "Revenue",
     "costofsales": "CostOfSales",
@@ -107,6 +116,46 @@ def load_model_selection():
     return selection
 
 
+@lru_cache(maxsize=1)
+def load_working_capital_data():
+    if not WORKING_CAPITAL_FILE.exists():
+        raise FileNotFoundError(
+            f"Working capital CSV not found: {WORKING_CAPITAL_FILE}"
+        )
+
+    data = pd.read_csv(WORKING_CAPITAL_FILE)
+
+    required = {
+        "EntityCode", "period", "dso_days",
+        "card_receivable_days_proxy", "dpo_days",
+        "dio_days", "ccc_days", "receivables_metric",
+        "ccc_status", "data_provenance"
+    }
+
+    missing = required - set(data.columns)
+    if missing:
+        raise ValueError(
+            f"Working capital CSV missing columns: {sorted(missing)}"
+        )
+
+    data["EntityCode"] = data["EntityCode"].astype(str).str.upper()
+    data["period"] = pd.to_datetime(data["period"], errors="coerce")
+
+    if data["period"].isna().any():
+        raise ValueError("Invalid period values in working capital CSV.")
+
+    if data.duplicated(["EntityCode", "period"]).any():
+        raise ValueError("Duplicate entity-month rows in working capital CSV.")
+
+    return data.sort_values(["EntityCode", "period"]).copy()
+
+
+def _safe_number(value):
+    if pd.isna(value):
+        return None
+    return float(value)
+
+
 @app.get("/health")
 def health():
     return {
@@ -114,7 +163,8 @@ def health():
         "service": "LedgerLens AI",
         "version": "0.3.0",
         "dataset_configured": DATA_ROOT.exists(),
-        "selection_configured": SELECTION_FILE.exists()
+        "selection_configured": SELECTION_FILE.exists(),
+        "working_capital_configured": WORKING_CAPITAL_FILE.exists()
     }
 
 
@@ -203,6 +253,96 @@ def get_forecast(entity: str, target: str):
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
+
+
+@app.get("/working-capital/{entity}")
+def get_working_capital(entity: str):
+    entity = entity.upper()
+
+    if entity not in SUPPORTED_ENTITIES:
+        raise HTTPException(
+            status_code=400,
+            detail="Unsupported entity. Use LOG, MFG or RET."
+        )
+
+    try:
+        data = load_working_capital_data()
+        entity_data = (
+            data[data["EntityCode"] == entity]
+            .sort_values("period")
+            .copy()
+        )
+
+        if entity_data.empty:
+            raise HTTPException(
+                status_code=404,
+                detail=f"No working-capital data found for {entity}."
+            )
+
+        latest = entity_data.iloc[-1]
+        history = entity_data.tail(12)
+
+        metric_columns = [
+            "dso_days",
+            "card_receivable_days_proxy",
+            "dpo_days",
+            "dio_days",
+            "ccc_days"
+        ]
+
+        metric_labels = {
+            "dso_days": "Days sales outstanding",
+            "card_receivable_days_proxy": "Card receivable settlement days proxy",
+            "dpo_days": "Days payables outstanding",
+            "dio_days": "Days inventory outstanding",
+            "ccc_days": "Cash conversion cycle"
+        }
+
+        metrics = {
+            column: {
+                "value": _safe_number(latest[column]),
+                "label": metric_labels[column]
+            }
+            for column in metric_columns
+        }
+
+        history_records = []
+        for _, row in history.iterrows():
+            record = {
+                "period": row["period"].date().isoformat()
+            }
+            record.update({
+                column: _safe_number(row[column])
+                for column in metric_columns
+            })
+            history_records.append(record)
+
+        return {
+            "entity": entity,
+            "dataset": "DD-WCP-003",
+            "dataset_type": "synthetic",
+            "currency": "USD",
+            "data_provenance": str(latest["data_provenance"]),
+            "latest_period": latest["period"].date().isoformat(),
+            "receivables_metric": str(latest["receivables_metric"]),
+            "ccc_status": str(latest["ccc_status"]),
+            "metrics": metrics,
+            "history": history_records,
+            "metric_notes": {
+                "LOG": "Trade DSO and DPO are available. DIO and CCC are unavailable because inventory data is missing.",
+                "MFG": "Trade DSO, DPO, DIO and CCC are available.",
+                "RET": "Card receivable settlement days are a proxy, not conventional trade DSO. Conventional CCC is unavailable."
+            }[entity]
+        }
+
+    except FileNotFoundError as exc:
+        raise HTTPException(status_code=503, detail=str(exc))
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(status_code=500, detail=str(exc))
 
 
 @app.get("/analytics/{entity}")

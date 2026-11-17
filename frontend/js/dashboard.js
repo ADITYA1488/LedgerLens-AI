@@ -8,6 +8,7 @@ let forecastCache = {};
 let forecastChart = null;
 
 const entitySelect = document.getElementById("entitySelect");
+const forecastTargetSelect = document.getElementById("forecastTargetSelect");
 
 function formatCurrency(value) {
     if (value == null || !Number.isFinite(Number(value))) return "—";
@@ -71,15 +72,33 @@ function updateKPIs(entity) {
 
 function updateChart(entity) {
     const analytics = analyticsCache[entity];
-    const forecast = forecastCache[entity]?.Revenue;
+    const target = forecastTargetSelect.value;
 
-    if (!analytics) return;
+    const metricConfig = {
+        Revenue: {
+            key: "revenue",
+            label: "Revenue"
+        },
+        CostOfSales: {
+            key: "cost_of_sales",
+            label: "Cost of Sales"
+        },
+        SupplierInvoices: {
+            key: "supplier_invoices",
+            label: "Supplier Invoices"
+        }
+    };
+
+    const metric = metricConfig[target];
+    const forecast = forecastCache[entity]?.[target];
+
+    if (!analytics || !metric) return;
 
     const history = analytics.history;
     const forecastPoint = forecast?.forecast?.[0];
 
     const labels = history.map(row => row.period);
-    const actualValues = history.map(row => row.revenue);
+    const actualValues = history.map(row => row[metric.key]);
 
     if (forecastPoint) {
         labels.push(forecastPoint.period);
@@ -92,7 +111,7 @@ function updateChart(entity) {
 
     const forecastDataset = [
         ...Array(Math.max(0, history.length - 1)).fill(null),
-        history[history.length - 1].revenue,
+        history[history.length - 1][metric.key],
         ...(forecastPoint ? [forecastPoint.predicted_value] : [])
     ];
 
@@ -106,7 +125,7 @@ function updateChart(entity) {
                 labels,
                 datasets: [
                     {
-                        label: "Historical Revenue",
+                        label: `Historical ${metric.label}`,
                         data: historicalDataset,
                         borderColor: "#203f60",
                         backgroundColor: "rgba(32,63,96,0.08)",
@@ -116,7 +135,7 @@ function updateChart(entity) {
                         pointRadius: 3
                     },
                     {
-                        label: "Forecast",
+                        label: `${metric.label} Forecast`,
                         data: forecastDataset,
                         borderColor: "#d9a441",
                         backgroundColor: "#d9a441",
@@ -167,15 +186,21 @@ function updateChart(entity) {
         }
     );
 }
-
 function updateInsights(entity) {
     const analytics = analyticsCache[entity];
-    const forecast = forecastCache[entity]?.Revenue;
+    const target = forecastTargetSelect.value;
+    const forecast = forecastCache[entity]?.[target];
 
     if (!analytics) return;
 
     const kpis = analytics.kpis;
     const point = forecast?.forecast?.[0];
+
+    const metricLabels = {
+        Revenue: "Revenue",
+        CostOfSales: "Cost of Sales",
+        SupplierInvoices: "Supplier Invoices"
+    };
 
     document.getElementById("insightsContent").innerHTML = `
         <div class="insight-placeholder">
@@ -187,16 +212,19 @@ function updateInsights(entity) {
             ${Number(kpis.gross_margin_pct).toFixed(2)}%
         </div>
         <div class="insight-placeholder">
-            <strong>Forecasting model</strong><br>
+            <strong>${metricLabels[target]} forecasting model</strong><br>
             ${forecast?.model || "Unavailable"}
         </div>
         <div class="insight-placeholder">
             <strong>Forecast period</strong><br>
             ${point?.period || "Unavailable"}
         </div>
+        <div class="insight-placeholder">
+            <strong>Predicted ${metricLabels[target]}</strong><br>
+            ${point ? formatCurrency(point.predicted_value) : "Unavailable"}
+        </div>
     `;
 }
-
 function updateEntityTable() {
     const tbody = document.getElementById("entityTable");
 
@@ -277,5 +305,12 @@ async function loadDashboard() {
 }
 
 entitySelect.addEventListener("change", updateSelectedEntity);
+
+forecastTargetSelect.addEventListener("change", () => {
+    const entity = entitySelect.value;
+    updateChart(entity);
+    updateInsights(entity);
+});
+
 
 loadDashboard();

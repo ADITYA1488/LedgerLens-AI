@@ -105,7 +105,11 @@
                             <h3>Financial Forecast</h3>
                             <p>Historical performance and next-month prediction</p>
                         </div>
-                        <span class="panel-tag">MONTHLY</span>
+                        <select id="forecastTargetSelect" class="entity-select" aria-label="Forecast metric">
+                                <option value="Revenue">Revenue</option>
+                                <option value="CostOfSales">Cost of Sales</option>
+                                <option value="SupplierInvoices">Supplier Invoices</option>
+                            </select>
                     </div>
                     <div class="chart-container">
                         <canvas id="forecastChart"></canvas>

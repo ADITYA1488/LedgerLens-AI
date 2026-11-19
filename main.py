@@ -4,11 +4,18 @@ from pathlib import Path
 from datetime import datetime
 import os
 import io
-
+from pydantic import BaseModel
+import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-
+from action_store import (
+    initialize_action_store,
+    upsert_generated_actions,
+    get_actions,
+    update_action_status,
+    get_action_history,
+)
 from forecasting import forecast_financial_series
 from forecasting_schema import (
     ForecastPoint,
@@ -24,10 +31,9 @@ PROJECT_ROOT = Path(
 DATA_ROOT = Path(
     os.getenv(
         "LEDGERLENS_DATA_DIR",
-        "/kaggle/input/datasets/adityashrinet/"
-        "ledgerlens-msme-working-capital/"
+        str(PROJECT_ROOT / "data" / "dataset")
     )
-)
+).resolve()
 
 SELECTION_FILE = Path(
     os.getenv(
@@ -54,7 +60,9 @@ app = FastAPI(
     description="Financial forecasting and working-capital intelligence",
     version="0.3.0"
 )
-
+@app.on_event("startup")
+def startup_event():
+    initialize_action_store()
 app.add_middleware(
     CORSMiddleware,
     allow_origins=[
@@ -110,44 +118,206 @@ def load_model_selection():
     return selection
 
 
+
 @app.post("/data/upload")
 async def upload_monthly_dataset(request: Request):
-    """Upload a validated monthly P&L CSV and activate it for forecasting."""
+    """Validate and safely activate a monthly financial CSV."""
+    import os
+    import tempfile
+    import shutil
+    from datetime import datetime
+
     raw = await request.body()
+
     if not raw:
         raise HTTPException(400, "Upload body is empty.")
+
     if len(raw) > 10 * 1024 * 1024:
         raise HTTPException(413, "CSV exceeds the 10 MB upload limit.")
+
+    required = {
+        "EntityCode",
+        "MonthEnd",
+        "Revenue",
+        "CostOfSales",
+        "SupplierInvoices",
+    }
+    numeric_columns = ["Revenue", "CostOfSales", "SupplierInvoices"]
+
     try:
         frame = pd.read_csv(io.BytesIO(raw))
-        required = {"EntityCode", "MonthEnd", "Revenue", "CostOfSales", "SupplierInvoices"}
-        missing = required.difference(frame.columns)
-        if missing:
-            raise HTTPException(400, f"CSV missing required columns: {sorted(missing)}")
-        frame["MonthEnd"] = pd.to_datetime(frame["MonthEnd"], errors="raise")
-        if frame.empty or frame["EntityCode"].isna().any():
-            raise HTTPException(400, "CSV has no rows or contains missing entity codes.")
-        if not set(frame["EntityCode"].astype(str).str.upper()).issubset(SUPPORTED_ENTITIES):
-            raise HTTPException(400, "CSV contains unsupported entity codes. Expected LOG, MFG, RET.")
-        for col in ["Revenue", "CostOfSales", "SupplierInvoices"]:
-            frame[col] = pd.to_numeric(frame[col], errors="raise")
-        frame = frame.sort_values(["EntityCode", "MonthEnd"])
+
+        missing_columns = required.difference(frame.columns)
+        if missing_columns:
+            raise HTTPException(
+                400,
+                f"Missing required columns: {sorted(missing_columns)}"
+            )
+
+        if frame.empty:
+            raise HTTPException(400, "CSV contains no records.")
+
+        # Normalize entity identifiers.
+        frame["EntityCode"] = (
+            frame["EntityCode"]
+            .astype("string")
+            .str.strip()
+            .str.upper()
+        )
+
+        if frame["EntityCode"].isna().any() or (
+            frame["EntityCode"] == ""
+        ).any():
+            raise HTTPException(400, "EntityCode contains empty values.")
+
+        unsupported = set(frame["EntityCode"].unique()) - SUPPORTED_ENTITIES
+        if unsupported:
+            raise HTTPException(
+                400,
+                f"Unsupported entities: {sorted(unsupported)}"
+            )
+
+        # Validate dates.
+        frame["MonthEnd"] = pd.to_datetime(
+            frame["MonthEnd"],
+            errors="coerce"
+        )
+
+        if frame["MonthEnd"].isna().any():
+            raise HTTPException(400, "CSV contains invalid dates.")
+
+        if not frame["MonthEnd"].dt.is_month_end.all():
+            raise HTTPException(
+                400,
+                "MonthEnd must contain month-end dates."
+            )
+
+        # Validate financial values.
+        for column in numeric_columns:
+            frame[column] = pd.to_numeric(
+                frame[column],
+                errors="coerce"
+            )
+
+            if frame[column].isna().any():
+                raise HTTPException(
+                    400,
+                    f"{column} contains missing or invalid numeric values."
+                )
+
+            if not np.isfinite(frame[column]).all():
+                raise HTTPException(
+                    400,
+                    f"{column} contains infinite values."
+                )
+
+        # Prevent ambiguous duplicate records.
+        duplicates = frame.duplicated(
+            subset=["EntityCode", "MonthEnd"],
+            keep=False
+        )
+
+        if duplicates.any():
+            duplicate_rows = frame.loc[
+                duplicates, ["EntityCode", "MonthEnd"]
+            ]
+            raise HTTPException(
+                400,
+                "Duplicate entity-month records detected: "
+                + duplicate_rows.to_string(index=False)
+            )
+
+        # Validate monthly continuity for each entity.
+        missing_periods = []
+
+        for entity, group in frame.groupby("EntityCode"):
+            dates = group["MonthEnd"].sort_values()
+
+            expected = pd.date_range(
+                start=dates.min(),
+                end=dates.max(),
+                freq="ME"
+            )
+
+            missing = expected.difference(dates)
+
+            if len(missing):
+                missing_periods.append(
+                    f"{entity}: "
+                    + ", ".join(missing.strftime("%Y-%m"))
+                )
+
+        if missing_periods:
+            raise HTTPException(
+                400,
+                "Missing monthly periods detected. "
+                + " | ".join(missing_periods)
+            )
+
+        # Sort and prepare validated dataset.
+        frame = frame.sort_values(
+            ["EntityCode", "MonthEnd"]
+        ).reset_index(drop=True)
+
         DATA_ROOT.mkdir(parents=True, exist_ok=True)
+
         destination = DATA_ROOT / "DD-WCP-003_FactMonthlyPL.csv"
-        frame.to_csv(destination, index=False)
+
+        # Write to a temporary file in the same directory.
+        temp_path = None
+
+        try:
+            with tempfile.NamedTemporaryFile(
+                mode="w",
+                suffix=".tmp",
+                prefix="ledgerlens_",
+                dir=DATA_ROOT,
+                delete=False,
+                encoding="utf-8",
+                newline=""
+            ) as temp_file:
+                temp_path = temp_file.name
+                frame.to_csv(temp_file, index=False)
+
+            # Preserve the currently active dataset.
+            backup_path = None
+
+            if destination.exists():
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                backup_path = destination.with_name(
+                    f"{destination.stem}_{timestamp}.backup.csv"
+                )
+                shutil.copy2(destination, backup_path)
+
+            # Atomic activation.
+            os.replace(temp_path, destination)
+            temp_path = None
+
+        finally:
+            if temp_path and os.path.exists(temp_path):
+                os.remove(temp_path)
+
+        # Clear cache only after successful activation.
         load_monthly_data.cache_clear()
+
         return {
             "status": "uploaded",
             "filename": destination.name,
             "rows": int(len(frame)),
-            "entities": sorted(frame["EntityCode"].astype(str).str.upper().unique().tolist()),
+            "entities": sorted(frame["EntityCode"].unique().tolist()),
             "latest_period": str(frame["MonthEnd"].max().date()),
-            "dataset_configured": True
+            "dataset_configured": True,
+            "backup_created": backup_path is not None,
         }
+
     except HTTPException:
         raise
+
     except Exception as exc:
-        raise HTTPException(400, f"CSV validation failed: {exc}")
+        raise HTTPException(
+            400,
+            f"CSV validation failed: {str(exc)}"
+        )
 
 
 @app.get("/health")
@@ -327,8 +497,8 @@ def get_entity_analytics(entity: str):
 
 
 @app.get("/actions/{entity}")
+@app.get("/actions/{entity}")
 def get_financial_actions(entity: str):
-
     entity = entity.upper()
 
     if entity not in SUPPORTED_ENTITIES:
@@ -336,7 +506,23 @@ def get_financial_actions(entity: str):
 
     try:
         data = load_monthly_data()
-        actions = generate_financial_actions(data, entity)
+
+        # Generate current financial actions
+        generated = generate_financial_actions(data, entity)
+
+        # Persist generated actions
+        upsert_generated_actions(entity, generated)
+
+        # Retrieve persistent action records
+        actions = get_actions(entity)
+
+        # Sort by active status, then severity
+        status_order = {
+            "open": 0,
+            "in_progress": 1,
+            "completed": 2,
+            "dismissed": 3
+        }
 
         severity_order = {
             "high": 0,
@@ -345,17 +531,24 @@ def get_financial_actions(entity: str):
         }
 
         actions.sort(
-            key=lambda action: severity_order.get(
-                action["severity"], 3
+            key=lambda action: (
+                status_order.get(action["status"], 4),
+                severity_order.get(action["severity"], 3)
             )
         )
+
+        active_actions = [
+            action for action in actions
+            if action["status"] not in {"completed", "dismissed"}
+        ]
 
         return {
             "entity": entity,
             "generated_at": datetime.utcnow().isoformat(),
             "total_actions": len(actions),
+            "active_actions": len(active_actions),
             "high_priority": sum(
-                1 for action in actions
+                1 for action in active_actions
                 if action["severity"] == "high"
             ),
             "actions": actions
@@ -367,3 +560,48 @@ def get_financial_actions(entity: str):
     except Exception as exc:
         raise HTTPException(500, str(exc))
 
+class ActionStatusUpdate(BaseModel):
+    status: str
+    notes: str = ""
+
+
+@app.patch("/actions/{action_id}/status")
+def change_action_status(action_id: str, payload: ActionStatusUpdate):
+    try:
+        result = update_action_status(
+            action_id=action_id,
+            new_status=payload.status,
+            notes=payload.notes
+        )
+
+        if result is None:
+            raise HTTPException(404, "Action not found.")
+
+        return {
+            "success": True,
+            "message": "Action status updated.",
+            "action": result
+        }
+
+    except ValueError as exc:
+        raise HTTPException(400, str(exc))
+
+    except HTTPException:
+        raise
+
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+
+@app.get("/actions/{action_id}/history")
+def get_action_history_endpoint(action_id: str):
+    try:
+        history = get_action_history(action_id)
+
+        return {
+            "action_id": action_id,
+            "total_events": len(history),
+            "history": history
+        }
+
+    except Exception as exc:
+        raise HTTPException(500, str(exc))

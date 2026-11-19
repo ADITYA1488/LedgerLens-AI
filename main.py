@@ -1,9 +1,10 @@
 from functools import lru_cache
 from pathlib import Path
 import os
+import io
 
 import pandas as pd
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from forecasting import forecast_financial_series
@@ -61,7 +62,7 @@ app.add_middleware(
         "http://127.0.0.1:8000"
     ],
     allow_credentials=False,
-    allow_methods=["GET", "OPTIONS"],
+    allow_methods=["GET", "POST", "OPTIONS"],
     allow_headers=["*"]
 )
 
@@ -105,6 +106,46 @@ def load_model_selection():
         )
 
     return selection
+
+
+@app.post("/data/upload")
+async def upload_monthly_dataset(request: Request):
+    """Upload a validated monthly P&L CSV and activate it for forecasting."""
+    raw = await request.body()
+    if not raw:
+        raise HTTPException(400, "Upload body is empty.")
+    if len(raw) > 10 * 1024 * 1024:
+        raise HTTPException(413, "CSV exceeds the 10 MB upload limit.")
+    try:
+        frame = pd.read_csv(io.BytesIO(raw))
+        required = {"EntityCode", "MonthEnd", "Revenue", "CostOfSales", "SupplierInvoices"}
+        missing = required.difference(frame.columns)
+        if missing:
+            raise HTTPException(400, f"CSV missing required columns: {sorted(missing)}")
+        frame["MonthEnd"] = pd.to_datetime(frame["MonthEnd"], errors="raise")
+        if frame.empty or frame["EntityCode"].isna().any():
+            raise HTTPException(400, "CSV has no rows or contains missing entity codes.")
+        if not set(frame["EntityCode"].astype(str).str.upper()).issubset(SUPPORTED_ENTITIES):
+            raise HTTPException(400, "CSV contains unsupported entity codes. Expected LOG, MFG, RET.")
+        for col in ["Revenue", "CostOfSales", "SupplierInvoices"]:
+            frame[col] = pd.to_numeric(frame[col], errors="raise")
+        frame = frame.sort_values(["EntityCode", "MonthEnd"])
+        DATA_ROOT.mkdir(parents=True, exist_ok=True)
+        destination = DATA_ROOT / "DD-WCP-003_FactMonthlyPL.csv"
+        frame.to_csv(destination, index=False)
+        load_monthly_data.cache_clear()
+        return {
+            "status": "uploaded",
+            "filename": destination.name,
+            "rows": int(len(frame)),
+            "entities": sorted(frame["EntityCode"].astype(str).str.upper().unique().tolist()),
+            "latest_period": str(frame["MonthEnd"].max().date()),
+            "dataset_configured": True
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        raise HTTPException(400, f"CSV validation failed: {exc}")
 
 
 @app.get("/health")

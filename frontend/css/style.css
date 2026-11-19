@@ -450,3 +450,22 @@ footer {
         grid-template-columns: 1fr;
     }
 }
+
+/* LedgerLens functional workspaces */
+.view-page { margin-top: 18px; }
+.view-page[hidden] { display: none !important; }
+.data-panel { margin-top: 18px; }
+.data-import-row { display: flex; align-items: center; gap: 12px; flex-wrap: wrap; }
+.data-import-row input[type="file"] { max-width: 100%; }
+.primary-button { border: 0; border-radius: 8px; padding: 11px 16px; background: #203f60; color: #fff; cursor: pointer; font-weight: 600; }
+.primary-button:hover { background: #294f78; }
+.primary-button:disabled { opacity: .6; cursor: wait; }
+.upload-status { font-size: 12px; color: var(--muted); }
+.data-note { font-size: 12px; line-height: 1.6; color: var(--muted); margin-top: 14px; }
+.wc-input-grid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 14px; margin: 18px 0; }
+.wc-input-grid label { display: flex; flex-direction: column; gap: 7px; font-size: 12px; color: var(--muted); }
+.wc-input-grid input { width: 100%; border: 1px solid var(--border); border-radius: 8px; padding: 10px; color: var(--text); background: #fff; }
+.wc-results-grid { display: grid; grid-template-columns: repeat(4, minmax(0,1fr)); gap: 12px; margin: 20px 0; }
+#simulatorPage .wc-results-grid { grid-template-columns: repeat(3, minmax(0,1fr)); }
+@media (max-width: 900px) { .wc-input-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } .wc-results-grid { grid-template-columns: repeat(2, minmax(0,1fr)); } }
+@media (max-width: 560px) { .wc-input-grid, .wc-results-grid, #simulatorPage .wc-results-grid { grid-template-columns: 1fr; } }

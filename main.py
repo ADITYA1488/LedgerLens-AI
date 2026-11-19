@@ -1,5 +1,7 @@
 from functools import lru_cache
+from action_engine import generate_financial_actions
 from pathlib import Path
+from datetime import datetime
 import os
 import io
 
@@ -322,3 +324,46 @@ def get_entity_analytics(entity: str):
 
     except Exception as exc:
         raise HTTPException(status_code=500, detail=str(exc))
+
+
+@app.get("/actions/{entity}")
+def get_financial_actions(entity: str):
+
+    entity = entity.upper()
+
+    if entity not in SUPPORTED_ENTITIES:
+        raise HTTPException(400, "Unsupported entity.")
+
+    try:
+        data = load_monthly_data()
+        actions = generate_financial_actions(data, entity)
+
+        severity_order = {
+            "high": 0,
+            "medium": 1,
+            "low": 2
+        }
+
+        actions.sort(
+            key=lambda action: severity_order.get(
+                action["severity"], 3
+            )
+        )
+
+        return {
+            "entity": entity,
+            "generated_at": datetime.utcnow().isoformat(),
+            "total_actions": len(actions),
+            "high_priority": sum(
+                1 for action in actions
+                if action["severity"] == "high"
+            ),
+            "actions": actions
+        }
+
+    except FileNotFoundError as exc:
+        raise HTTPException(503, str(exc))
+
+    except Exception as exc:
+        raise HTTPException(500, str(exc))
+

@@ -7,6 +7,145 @@ let analyticsCache = {};
 let forecastCache = {};
 let forecastChart = null;
 
+const actionCache = {};
+const ACTION_STORAGE_KEY = "ledgerlens_action_states_v1";
+
+function getSavedActionStates() {
+    try {
+        return JSON.parse(localStorage.getItem(ACTION_STORAGE_KEY) || "{}");
+    } catch {
+        return {};
+    }
+}
+
+function saveActionState(entity, actionId, status) {
+    const states = getSavedActionStates();
+    states[`${entity}:${actionId}`] = status;
+    localStorage.setItem(ACTION_STORAGE_KEY, JSON.stringify(states));
+}
+
+function getActionState(entity, action) {
+    const states = getSavedActionStates();
+    return states[`${entity}:${action.id}`] || action.status || "open";
+}
+
+function escapeHTML(value) {
+    return String(value ?? "").replace(/[&<>"']/g, char => ({
+        "&": "&amp;",
+        "<": "&lt;",
+        ">": "&gt;",
+        '"': "&quot;",
+        "'": "&#39;"
+    }[char]));
+}
+
+async function loadActionCenter(entity) {
+    const container = document.getElementById("actionCenterContent");
+    const counter = document.getElementById("actionCount");
+
+    container.innerHTML = `
+        <div class="insight-placeholder">Scanning financial signals...</div>
+    `;
+
+    try {
+        const data = await apiGet(`/actions/${entity}`);
+        actionCache[entity] = data;
+
+        const actions = data.actions || [];
+        const activeActions = actions.filter(
+            action => getActionState(entity, action) === "open"
+        );
+
+        counter.textContent = `${activeActions.length} active`;
+
+        if (!actions.length) {
+            container.innerHTML = `
+                <div class="action-empty">
+                    <h4>All clear</h4>
+                    <p>No financial risks detected for ${entity}.</p>
+                </div>
+            `;
+            return;
+        }
+
+        container.innerHTML = actions.map(action => {
+            const status = getActionState(entity, action);
+            const severity = String(action.severity || "low").toLowerCase();
+
+            return `
+                <article class="action-card ${severity} ${status !== "open" ? "resolved" : ""}">
+                    <div class="action-card-top">
+                        <span class="severity-badge ${severity}">
+                            ${escapeHTML(severity.toUpperCase())}
+                        </span>
+                        <span class="action-status">${escapeHTML(status.toUpperCase())}</span>
+                    </div>
+
+                    <h4>${escapeHTML(action.title)}</h4>
+
+                    <p class="action-trigger">
+                        ${escapeHTML(action.trigger)}
+                    </p>
+
+                    <div class="action-financial-impact">
+                        <span>${escapeHTML(action.financial_value_label || "Financial impact")}</span>
+                        <strong>${formatCurrency(action.financial_value)}</strong>
+                    </div>
+
+                    <div class="action-recommendation">
+                        <strong>Recommended action</strong>
+                        <p>${escapeHTML(action.action)}</p>
+                    </div>
+
+                    <div class="action-automation">
+                        <span>⚙</span>
+                        ${escapeHTML(action.automation || "Action generated automatically")}
+                    </div>
+
+                    <div class="action-buttons">
+                        ${
+                            status === "open"
+                            ? `
+                                <button class="action-complete-btn"
+                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'completed')">
+                                    ✓ Mark Complete
+                                </button>
+
+                                <button class="action-dismiss-btn"
+                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'dismissed')">
+                                    Dismiss
+                                </button>
+                            `
+                            : `
+                                <button class="action-restore-btn"
+                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'open')">
+                                    Reopen
+                                </button>
+                            `
+                        }
+                    </div>
+                </article>
+            `;
+        }).join("");
+
+    } catch (error) {
+        counter.textContent = "Unavailable";
+
+        container.innerHTML = `
+            <div class="action-error">
+                <strong>Action Engine unavailable</strong>
+                <p>${escapeHTML(error.message)}</p>
+            </div>
+        `;
+    }
+}
+
+window.setLedgerLensActionStatus = function(entity, actionId, status) {
+    saveActionState(entity, actionId, status);
+    loadActionCenter(entity);
+};
+
+
 const entitySelect = document.getElementById("entitySelect");
 const forecastTargetSelect = document.getElementById("forecastTargetSelect");
 
@@ -254,6 +393,8 @@ function updateSelectedEntity() {
     updateKPIs(entity);
     updateChart(entity);
     updateInsights(entity);
+
+    loadActionCenter(entity);
 }
 
 async function loadDashboard() {
@@ -315,46 +456,138 @@ forecastTargetSelect.addEventListener("change", () => {
 
 loadDashboard();
 
-// Workspace navigation, CSV data refresh, and deterministic working-capital tools.
-const navLinks = document.querySelectorAll('.navigation .nav-item[data-view]');
-const commandSections = [
-    document.querySelector('.welcome-section'),
-    document.querySelector('.kpi-grid'),
-    document.querySelector('.entity-panel'),
-    document.querySelector('#dataImportPanel')
-];
-const pageMap = {
-    'working-capital': document.getElementById('workingCapitalPage'),
-    'simulator': document.getElementById('simulatorPage'),
-    'receivables': document.getElementById('placeholderPage'),
-    'payables': document.getElementById('placeholderPage')
+// Workspace navigation and visibility controller
+const navLinks = document.querySelectorAll('.sidebar .nav-item');
+
+const navigationMap = {
+    'Command Center': 'command',
+    'Forecasting': 'forecast',
+    'Working Capital': 'working-capital',
+    'Receivables': 'receivables',
+    'Payables': 'payables',
+    'Scenario Simulator': 'simulator'
 };
 
-function switchWorkspace(view) {
-    commandSections.forEach(section => { if (section) section.hidden = view !== 'command'; });
-    const contentGrid = document.querySelector('.content-grid');
-    if (contentGrid) contentGrid.hidden = view !== 'command' && view !== 'forecast';
-    const forecastPanel = document.querySelector('.forecast-panel');
-    if (forecastPanel) forecastPanel.hidden = view !== 'forecast' && view !== 'command';
-    document.querySelector('.insights-panel').hidden = view !== 'command';
-    Object.values(pageMap).forEach(page => { if (page) page.hidden = true; });
-    if (view === 'working-capital') document.getElementById('workingCapitalPage').hidden = false;
-    else if (view === 'simulator') document.getElementById('simulatorPage').hidden = false;
-    else if (view === 'receivables' || view === 'payables') {
-        document.getElementById('placeholderPage').hidden = false;
-        document.getElementById('placeholderTitle').textContent = view === 'receivables' ? 'Receivables Workspace' : 'Payables Workspace';
-        document.getElementById('placeholderDescription').textContent = 'Upload invoice-level records to enable aging, overdue balances, and counterparty analysis. These analytics are not calculated from the monthly P&L file.';
+navLinks.forEach(link => {
+    const label = link.querySelector('span')?.textContent.trim();
+    if (navigationMap[label]) {
+        link.dataset.view = navigationMap[label];
     }
-    navLinks.forEach(link => link.classList.toggle('active', link.dataset.view === view));
-    const heading = document.querySelector('.topbar h1');
-    const labels = {command:'Command Center', forecast:'Forecasting', 'working-capital':'Working Capital', simulator:'Scenario Simulator', receivables:'Receivables', payables:'Payables'};
-    heading.textContent = labels[view] || 'Command Center';
-}
-navLinks.forEach(link => link.addEventListener('click', event => {
-    event.preventDefault();
-    switchWorkspace(link.dataset.view);
-}));
+});
 
+const welcomeSection = document.querySelector('.welcome-section');
+const kpiSection = document.querySelector('.kpi-grid');
+const contentGrid = document.querySelector('.content-grid');
+const forecastPanel = document.querySelector('.forecast-panel');
+const insightsPanel = document.querySelector('.insights-panel');
+const actionCenterPanel = document.getElementById('actionCenterContent')?.closest('.panel');
+const entityPanel = document.querySelector('.entity-panel');
+const dataImportPanel = document.getElementById('dataImportPanel');
+
+const workingCapitalPage = document.getElementById('workingCapitalPage');
+const simulatorPage = document.getElementById('simulatorPage');
+const placeholderPage = document.getElementById('placeholderPage');
+
+const heading = document.querySelector('.topbar h1');
+
+const workspaceLabels = {
+    command: 'Command Center',
+    forecast: 'Forecasting',
+    'working-capital': 'Working Capital',
+    receivables: 'Receivables',
+    payables: 'Payables',
+    simulator: 'Scenario Simulator'
+};
+
+function hideAllWorkspaces() {
+    [
+        welcomeSection,
+        kpiSection,
+        contentGrid,
+        forecastPanel,
+        insightsPanel,
+        actionCenterPanel,
+        entityPanel,
+        dataImportPanel,
+        workingCapitalPage,
+        simulatorPage,
+        placeholderPage
+    ].forEach(section => {
+        if (section) section.hidden = true;
+    });
+}
+
+function switchWorkspace(view) {
+    hideAllWorkspaces();
+
+    // Command Center
+    if (view === 'command') {
+        if (welcomeSection) welcomeSection.hidden = false;
+        if (kpiSection) kpiSection.hidden = false;
+        if (contentGrid) contentGrid.hidden = false;
+        if (forecastPanel) forecastPanel.hidden = false;
+        if (insightsPanel) insightsPanel.hidden = false;
+        if (actionCenterPanel) actionCenterPanel.hidden = false;
+        if (entityPanel) entityPanel.hidden = false;
+        if (dataImportPanel) dataImportPanel.hidden = false;
+    }
+
+    // Forecasting
+    else if (view === 'forecast') {
+        if (contentGrid) contentGrid.hidden = false;
+        if (forecastPanel) forecastPanel.hidden = false;
+    }
+
+    // Working Capital
+    else if (view === 'working-capital') {
+        if (workingCapitalPage) workingCapitalPage.hidden = false;
+    }
+
+    // Scenario Simulator
+    else if (view === 'simulator') {
+        if (simulatorPage) simulatorPage.hidden = false;
+    }
+
+    // Receivables / Payables
+    else if (view === 'receivables' || view === 'payables') {
+        if (placeholderPage) placeholderPage.hidden = false;
+
+        const title = document.getElementById('placeholderTitle');
+        const description = document.getElementById('placeholderDescription');
+
+        if (title) {
+            title.textContent =
+                view === 'receivables'
+                    ? 'Receivables Workspace'
+                    : 'Payables Workspace';
+        }
+
+        if (description) {
+            description.textContent =
+                'Upload invoice-level records to enable aging, overdue balances, and counterparty analysis. These analytics are not calculated from the monthly P&L file.';
+        }
+    }
+
+    // Update sidebar selection
+    navLinks.forEach(link => {
+        link.classList.toggle('active', link.dataset.view === view);
+    });
+
+    // Update page heading
+    if (heading) {
+        heading.textContent = workspaceLabels[view] || 'Command Center';
+    }
+}
+
+navLinks.forEach(link => {
+    link.addEventListener('click', event => {
+        event.preventDefault();
+        switchWorkspace(link.dataset.view);
+    });
+});
+
+// Start on Command Center
+switchWorkspace('command');
 function getNumber(id) {
     const value = Number(document.getElementById(id).value);
     return Number.isFinite(value) && value >= 0 ? value : 0;

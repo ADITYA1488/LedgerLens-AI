@@ -131,6 +131,22 @@
                 </article>
             </section>
 
+            <section class="panel action-center-panel" id="actionCenterPanel">
+    <div class="panel-header">
+        <div>
+            <h3>Action Center</h3>
+            <p>Detected financial risks and automatically generated tasks</p>
+        </div>
+        <span id="actionCount" class="demo-badge">Loading actions...</span>
+    </div>
+
+    <div id="actionCenterContent" class="action-center-content">
+        <div class="insight-placeholder">
+            Loading financial actions...
+        </div>
+    </div>
+</section>
+
             <section class="panel entity-panel">
                 <div class="panel-header">
                     <div>
@@ -155,7 +171,144 @@
                     </table>
                 </div>
             </section>
+            <!-- WORKING CAPITAL WORKSPACE -->
+<section class="panel view-page" id="workingCapitalPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3>Working Capital Calculator</h3>
+            <p>Estimate receivables, inventory, payables, and cash conversion cycle</p>
+        </div>
+    </div>
 
+    <div class="wc-input-grid">
+        <label>Annual Revenue
+            <input id="wcRevenue" type="number" value="10000000" min="0">
+        </label>
+
+        <label>Annual Cost of Sales
+            <input id="wcCogs" type="number" value="6500000" min="0">
+        </label>
+
+        <label>Days Sales Outstanding (DSO)
+            <input id="wcDso" type="number" value="45" min="0">
+        </label>
+
+        <label>Days Inventory Outstanding (DIO)
+            <input id="wcDio" type="number" value="60" min="0">
+        </label>
+
+        <label>Days Payables Outstanding (DPO)
+            <input id="wcDpo" type="number" value="30" min="0">
+        </label>
+    </div>
+
+    <button id="calculateWCButton" class="primary-btn">
+        Calculate Working Capital
+    </button>
+
+    <div class="wc-results-grid">
+        <div class="panel">
+            <small>Accounts Receivable</small>
+            <h3 id="wcReceivables">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Estimated Inventory</small>
+            <h3 id="wcInventory">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Accounts Payable</small>
+            <h3 id="wcPayables">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Cash Conversion Cycle</small>
+            <h3 id="wcCcc">0 days</h3>
+        </div>
+    </div>
+
+    <div id="wcNetWorkingCapital" class="insight-placeholder"></div>
+</section>
+
+<!-- SCENARIO SIMULATOR -->
+<section class="panel view-page" id="simulatorPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3>Working Capital Scenario Simulator</h3>
+            <p>Simulate changes in payment and inventory cycles to estimate cash impact</p>
+        </div>
+    </div>
+
+    <div class="wc-input-grid">
+        <label>Annual Revenue
+            <input id="simRevenue" type="number" value="10000000" min="0">
+        </label>
+
+        <label>Annual Cost of Sales
+            <input id="simCogs" type="number" value="6500000" min="0">
+        </label>
+
+        <label>Baseline DSO
+            <input id="simDsoBase" type="number" value="45" min="0">
+        </label>
+
+        <label>New DSO
+            <input id="simDsoNew" type="number" value="35" min="0">
+        </label>
+
+        <label>Baseline DIO
+            <input id="simDioBase" type="number" value="60" min="0">
+        </label>
+
+        <label>New DIO
+            <input id="simDioNew" type="number" value="50" min="0">
+        </label>
+
+        <label>Baseline DPO
+            <input id="simDpoBase" type="number" value="30" min="0">
+        </label>
+
+        <label>New DPO
+            <input id="simDpoNew" type="number" value="40" min="0">
+        </label>
+    </div>
+
+    <button id="runScenarioButton" class="primary-btn">
+        Run Scenario
+    </button>
+
+    <div class="wc-results-grid">
+        <div class="panel">
+            <small>Estimated Cash Impact</small>
+            <h3 id="simCashImpact">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Baseline CCC</small>
+            <h3 id="simCccBase">0 days</h3>
+        </div>
+
+        <div class="panel">
+            <small>Scenario CCC</small>
+            <h3 id="simCccNew">0 days</h3>
+        </div>
+    </div>
+
+    <div id="scenarioExplanation" class="insight-placeholder"></div>
+</section>
+
+<!-- RECEIVABLES / PAYABLES PLACEHOLDER -->
+<section class="panel view-page" id="placeholderPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3 id="placeholderTitle">Financial Workspace</h3>
+            <p id="placeholderDescription">
+                Upload invoice-level records to enable detailed analysis.
+            </p>
+        </div>
+    </div>
+</section>
             <footer>
                 LedgerLens AI · Financial Digital Twin · Synthetic demonstration data
             </footer>

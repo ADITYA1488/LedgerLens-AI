@@ -1,7 +1,3 @@
-from typing import Any
-
-from backend.agents.state import LedgerLensState
-
 
 AGENT_NAMES = {
     "financial_analyst",
@@ -13,63 +9,164 @@ AGENT_NAMES = {
 }
 
 
-def supervisor_node(state: LedgerLensState) -> dict[str, Any]:
-    """
-    Deterministic supervisor.
+def _is_comprehensive_query(query: str) -> bool:
+    q = query.lower()
 
-    Routes requests to specialized agents without requiring LLM inference.
-    LLM-driven planning will be added later without changing the
-    overall graph interface.
-    """
+    comprehensive_phrases = [
+        "financial health",
+        "overall analysis",
+        "comprehensive analysis",
+        "complete analysis",
+        "full analysis",
+        "analyze everything",
+        "analyze all",
+        "holistic analysis",
+    ]
 
+    if any(phrase in q for phrase in comprehensive_phrases):
+        return True
+
+    intent_groups = {
+        "forecast": [
+            "forecast",
+            "predict",
+            "prediction",
+            "future",
+            "outlook",
+            "project",
+        ],
+        "risk": [
+            "risk",
+            "risky",
+            "exposure",
+            "threat",
+            "liquidity",
+            "default",
+        ],
+        "investigation": [
+            "why",
+            "cause",
+            "reason",
+            "investigate",
+            "root cause",
+            "drivers",
+        ],
+        "decision": [
+            "recommend",
+            "recommendation",
+            "what should",
+            "improve",
+            "action",
+            "solution",
+        ],
+    }
+
+    detected_intents = sum(
+        any(keyword in q for keyword in keywords)
+        for keywords in intent_groups.values()
+    )
+
+    return detected_intents >= 3
+
+
+def supervisor_node(state):
     query = state.get("user_query", "").lower().strip()
-    iteration = state.get("iteration_count", 0)
+    iteration_count = state.get("iteration_count", 0)
     max_iterations = state.get("max_iterations", 8)
 
-    # Prevent runaway graph execution.
-    if iteration >= max_iterations:
+    if iteration_count >= max_iterations:
         return {
             "next_agent": "decision_agent",
             "current_agent": "supervisor",
-            "iteration_count": iteration,
+            "execution_mode": "single",
+            "iteration_count": iteration_count + 1,
             "agent_trace": ["supervisor:max_iterations_reached"],
         }
 
-    # Determine the initial agent based on query intent.
-    if any(word in query for word in [
-        "forecast", "predict", "prediction", "future",
-        "next month", "next quarter", "project"
-    ]):
-        target = "forecast_agent"
+    # Comprehensive financial analysis
+    if _is_comprehensive_query(query):
+        return {
+            "next_agent": "financial_analyst",
+            "current_agent": "supervisor",
+            "execution_mode": "comprehensive",
+            "iteration_count": iteration_count + 1,
+            "agent_trace": [
+                "supervisor:comprehensive_analysis_detected",
+                "supervisor:routed_to:financial_analyst",
+            ],
+        }
 
-    elif any(word in query for word in [
-        "risk", "risky", "exposure", "threat",
-        "danger", "liquidity", "default"
-    ]):
-        target = "risk_agent"
+    # Focused query routing
+    if any(
+        keyword in query
+        for keyword in [
+            "forecast",
+            "predict",
+            "prediction",
+            "future",
+            "next month",
+            "next quarter",
+            "project",
+            "outlook",
+        ]
+    ):
+        next_agent = "forecast_agent"
 
-    elif any(word in query for word in [
-        "investigate", "why", "cause", "reason",
-        "explain", "root cause", "driver", "drivers"
-    ]):
-        target = "investigation_agent"
+    elif any(
+        keyword in query
+        for keyword in [
+            "risk",
+            "risky",
+            "exposure",
+            "threat",
+            "danger",
+            "liquidity",
+            "default",
+        ]
+    ):
+        next_agent = "risk_agent"
 
-    elif any(word in query for word in [
-        "recommend", "recommendation", "what should",
-        "action", "improve", "solution", "decision"
-    ]):
-        target = "investigation_agent"
+    elif any(
+        keyword in query
+        for keyword in [
+            "investigate",
+            "why",
+            "cause",
+            "reason",
+            "explain",
+            "root cause",
+            "driver",
+            "drivers",
+        ]
+    ):
+        next_agent = "investigation_agent"
+
+    elif any(
+        keyword in query
+        for keyword in [
+            "recommend",
+            "recommendation",
+            "what should",
+            "improve",
+            "action",
+            "solution",
+            "decision",
+        ]
+    ):
+        next_agent = "investigation_agent"
 
     else:
-        target = "financial_analyst"
+        next_agent = "financial_analyst"
 
-    # Validate the destination.
-    if target not in AGENT_NAMES:
-        target = "financial_analyst"
+    if next_agent not in AGENT_NAMES:
+        next_agent = "financial_analyst"
 
     return {
-        "next_agent": target,
+        "next_agent": next_agent,
         "current_agent": "supervisor",
-        "iteration_count": iteration + 1,
-        "agent_trace": [f"supervisor:routed_to:{target}"],
+        "execution_mode": "single",
+        "iteration_count": iteration_count + 1,
+        "agent_trace": [
+            f"supervisor:routed_to:{next_agent}",
+        ],
     }

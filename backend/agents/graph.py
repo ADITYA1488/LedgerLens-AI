@@ -1,5 +1,8 @@
+
 import time
+
 from langgraph.graph import StateGraph, START, END
+
 from backend.agents.contracts import validate_agent_output
 from backend.agents.state import LedgerLensState
 from backend.agents.nodes.supervisor import supervisor_node
@@ -14,6 +17,28 @@ def route_from_supervisor(state: LedgerLensState) -> str:
     return state.get("next_agent", "financial_analyst")
 
 
+def is_comprehensive(state: LedgerLensState) -> bool:
+    return state.get("execution_mode") == "comprehensive"
+
+
+def route_after_financial_analyst(state: LedgerLensState) -> str:
+    if is_comprehensive(state):
+        return "forecast_agent"
+    return END
+
+
+def route_after_forecast(state: LedgerLensState) -> str:
+    if is_comprehensive(state):
+        return "risk_agent"
+    return END
+
+
+def route_after_risk(state: LedgerLensState) -> str:
+    if is_comprehensive(state):
+        return "investigation_agent"
+    return END
+
+
 def route_after_investigation(state: LedgerLensState) -> str:
     trace = state.get("agent_trace", [])
 
@@ -23,6 +48,10 @@ def route_after_investigation(state: LedgerLensState) -> str:
         for item in trace
     ):
         return END
+
+    # Comprehensive workflow always proceeds to final synthesis
+    if is_comprehensive(state):
+        return "decision_agent"
 
     query = state.get("user_query", "").lower()
 
@@ -40,6 +69,7 @@ def route_after_investigation(state: LedgerLensState) -> str:
         return "decision_agent"
 
     return END
+
 
 def enforce_contract(agent_name, node, max_retries=1):
     MAX_AGENT_EXECUTIONS_DEFAULT = 5
@@ -137,10 +167,12 @@ def enforce_contract(agent_name, node, max_retries=1):
 
     return wrapped
 
+
 def build_graph():
     graph = StateGraph(LedgerLensState)
 
     graph.add_node("supervisor", supervisor_node)
+
     graph.add_node(
         "financial_analyst",
         enforce_contract("financial_analyst", financial_analyst_node),
@@ -180,7 +212,35 @@ def build_graph():
         },
     )
 
-    # Investigation → Decision when the user requests recommendations/actions
+    # Comprehensive sequential workflow
+    graph.add_conditional_edges(
+        "financial_analyst",
+        route_after_financial_analyst,
+        {
+            "forecast_agent": "forecast_agent",
+            END: END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        "forecast_agent",
+        route_after_forecast,
+        {
+            "risk_agent": "risk_agent",
+            END: END,
+        },
+    )
+
+    graph.add_conditional_edges(
+        "risk_agent",
+        route_after_risk,
+        {
+            "investigation_agent": "investigation_agent",
+            END: END,
+        },
+    )
+
+    # Investigation → Decision for comprehensive queries or action requests
     graph.add_conditional_edges(
         "investigation_agent",
         route_after_investigation,
@@ -190,10 +250,6 @@ def build_graph():
         },
     )
 
-    # Other agents terminate normally
-    graph.add_edge("financial_analyst", END)
-    graph.add_edge("forecast_agent", END)
-    graph.add_edge("risk_agent", END)
     graph.add_edge("decision_agent", END)
 
     return graph.compile()

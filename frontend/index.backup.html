@@ -1,0 +1,321 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="LedgerLens AI - Working Capital Intelligence">
+    <title>LedgerLens AI | Command Center</title>
+    <link rel="stylesheet" href="css/style.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+
+<body>
+    <div class="app-layout">
+
+        <aside class="sidebar">
+            <div class="brand">
+                <div class="brand-icon">L</div>
+                <div>
+                    <h2>LedgerLens</h2>
+                    <span>FINANCIAL INTELLIGENCE</span>
+                </div>
+            </div>
+
+            <div class="workspace-label">WORKSPACE</div>
+
+            <nav class="navigation">
+                <a href="#" class="nav-item active">▦ <span>Command Center</span></a>
+                <a href="#" class="nav-item">↗ <span>Forecasting</span></a>
+                <a href="#" class="nav-item">◈ <span>Working Capital</span></a>
+                <a href="#" class="nav-item">▤ <span>Receivables</span></a>
+                <a href="#" class="nav-item">▧ <span>Payables</span></a>
+                <a href="#" class="nav-item">◇ <span>Scenario Simulator</span></a>
+            </nav>
+
+            <div class="sidebar-bottom">
+                <div class="workspace-label">SYSTEM</div>
+                <a href="#" class="nav-item">⚙ <span>Settings</span></a>
+                <div class="profile">
+                    <div class="avatar">A</div>
+                    <div>
+                        <strong>Administrator</strong>
+                        <small>Demo Workspace</small>
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <main class="main-content">
+
+            <header class="topbar">
+                <div>
+                    <span class="breadcrumb">Workspace / Overview</span>
+                    <h1>Command Center</h1>
+                </div>
+
+                <div class="topbar-actions">
+                    <span class="demo-badge">SYNTHETIC DEMO DATA</span>
+                    <button class="date-button">September 2026 ▾</button>
+                </div>
+            </header>
+
+            <section class="welcome-section">
+                <div>
+                    <h2>Working Capital Overview</h2>
+                    <p>Monitor financial performance and anticipate liquidity needs.</p>
+                </div>
+
+                <select id="entitySelect" class="entity-select">
+                    <option value="LOG">LOG — Logistics</option>
+                    <option value="MFG">MFG — Manufacturing</option>
+                    <option value="RET">RET — Retail</option>
+                </select>
+            </section>
+
+            <section class="kpi-grid">
+                <article class="kpi-card">
+                    <span class="kpi-label">MONTHLY REVENUE</span>
+                    <h2 id="revenueValue">Loading...</h2>
+                    <span class="kpi-footnote">Latest available period</span>
+                </article>
+
+                <article class="kpi-card">
+                    <span class="kpi-label">COST OF SALES</span>
+                    <h2 id="costValue">Loading...</h2>
+                    <span class="kpi-footnote">Latest available period</span>
+                </article>
+
+                <article class="kpi-card">
+                    <span class="kpi-label">SUPPLIER INVOICES</span>
+                    <h2 id="supplierValue">Loading...</h2>
+                    <span class="kpi-footnote">Latest available period</span>
+                </article>
+
+                <article class="kpi-card">
+                    <span class="kpi-label">NEXT MONTH REVENUE</span>
+                    <h2 id="forecastValue">Loading...</h2>
+                    <span class="kpi-footnote">Model-generated forecast</span>
+                </article>
+            </section>
+
+            <section class="content-grid">
+                <article class="panel forecast-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Financial Forecast</h3>
+                            <p>Historical performance and next-month prediction</p>
+                        </div>
+                        <select id="forecastTargetSelect" class="entity-select" aria-label="Forecast metric">
+                                <option value="Revenue">Revenue</option>
+                                <option value="CostOfSales">Cost of Sales</option>
+                                <option value="SupplierInvoices">Supplier Invoices</option>
+                            </select>
+                    </div>
+                    <div class="chart-container">
+                        <canvas id="forecastChart"></canvas>
+                    </div>
+                </article>
+
+                <article class="panel insights-panel">
+                    <div class="panel-header">
+                        <div>
+                            <h3>Intelligence Brief</h3>
+                            <p>Financial signals and observations</p>
+                        </div>
+                    </div>
+                    <div id="insightsContent" class="insights-content">
+                        <div class="insight-placeholder">
+                            Forecast insights will appear here after API integration.
+                        </div>
+                    </div>
+                </article>
+            </section>
+
+            <section class="panel action-center-panel" id="actionCenterPanel">
+    <div class="panel-header">
+        <div>
+            <h3>Action Center</h3>
+            <p>Detected financial risks and automatically generated tasks</p>
+        </div>
+        <span id="actionCount" class="demo-badge">Loading actions...</span>
+    </div>
+
+    <div id="actionCenterContent" class="action-center-content">
+        <div class="insight-placeholder">
+            Loading financial actions...
+        </div>
+    </div>
+</section>
+
+            <section class="panel entity-panel">
+                <div class="panel-header">
+                    <div>
+                        <h3>Entity Performance</h3>
+                        <p>Compare financial indicators across business entities</p>
+                    </div>
+                </div>
+
+                <div class="table-wrapper">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th>ENTITY</th>
+                                <th>REVENUE</th>
+                                <th>COST OF SALES</th>
+                                <th>SUPPLIER INVOICES</th>
+                            </tr>
+                        </thead>
+                        <tbody id="entityTable">
+                            <tr><td colspan="4">Waiting for financial data...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+            <!-- WORKING CAPITAL WORKSPACE -->
+<section class="panel view-page" id="workingCapitalPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3>Working Capital Calculator</h3>
+            <p>Estimate receivables, inventory, payables, and cash conversion cycle</p>
+        </div>
+    </div>
+
+    <div class="wc-input-grid">
+        <label>Annual Revenue
+            <input id="wcRevenue" type="number" value="10000000" min="0">
+        </label>
+
+        <label>Annual Cost of Sales
+            <input id="wcCogs" type="number" value="6500000" min="0">
+        </label>
+
+        <label>Days Sales Outstanding (DSO)
+            <input id="wcDso" type="number" value="45" min="0">
+        </label>
+
+        <label>Days Inventory Outstanding (DIO)
+            <input id="wcDio" type="number" value="60" min="0">
+        </label>
+
+        <label>Days Payables Outstanding (DPO)
+            <input id="wcDpo" type="number" value="30" min="0">
+        </label>
+    </div>
+
+    <button id="calculateWCButton" class="primary-btn">
+        Calculate Working Capital
+    </button>
+
+    <div class="wc-results-grid">
+        <div class="panel">
+            <small>Accounts Receivable</small>
+            <h3 id="wcReceivables">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Estimated Inventory</small>
+            <h3 id="wcInventory">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Accounts Payable</small>
+            <h3 id="wcPayables">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Cash Conversion Cycle</small>
+            <h3 id="wcCcc">0 days</h3>
+        </div>
+    </div>
+
+    <div id="wcNetWorkingCapital" class="insight-placeholder"></div>
+</section>
+
+<!-- SCENARIO SIMULATOR -->
+<section class="panel view-page" id="simulatorPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3>Working Capital Scenario Simulator</h3>
+            <p>Simulate changes in payment and inventory cycles to estimate cash impact</p>
+        </div>
+    </div>
+
+    <div class="wc-input-grid">
+        <label>Annual Revenue
+            <input id="simRevenue" type="number" value="10000000" min="0">
+        </label>
+
+        <label>Annual Cost of Sales
+            <input id="simCogs" type="number" value="6500000" min="0">
+        </label>
+
+        <label>Baseline DSO
+            <input id="simDsoBase" type="number" value="45" min="0">
+        </label>
+
+        <label>New DSO
+            <input id="simDsoNew" type="number" value="35" min="0">
+        </label>
+
+        <label>Baseline DIO
+            <input id="simDioBase" type="number" value="60" min="0">
+        </label>
+
+        <label>New DIO
+            <input id="simDioNew" type="number" value="50" min="0">
+        </label>
+
+        <label>Baseline DPO
+            <input id="simDpoBase" type="number" value="30" min="0">
+        </label>
+
+        <label>New DPO
+            <input id="simDpoNew" type="number" value="40" min="0">
+        </label>
+    </div>
+
+    <button id="runScenarioButton" class="primary-btn">
+        Run Scenario
+    </button>
+
+    <div class="wc-results-grid">
+        <div class="panel">
+            <small>Estimated Cash Impact</small>
+            <h3 id="simCashImpact">$0</h3>
+        </div>
+
+        <div class="panel">
+            <small>Baseline CCC</small>
+            <h3 id="simCccBase">0 days</h3>
+        </div>
+
+        <div class="panel">
+            <small>Scenario CCC</small>
+            <h3 id="simCccNew">0 days</h3>
+        </div>
+    </div>
+
+    <div id="scenarioExplanation" class="insight-placeholder"></div>
+</section>
+
+<!-- RECEIVABLES / PAYABLES PLACEHOLDER -->
+<section class="panel view-page" id="placeholderPage" hidden>
+    <div class="panel-header">
+        <div>
+            <h3 id="placeholderTitle">Financial Workspace</h3>
+            <p id="placeholderDescription">
+                Upload invoice-level records to enable detailed analysis.
+            </p>
+        </div>
+    </div>
+</section>
+            <footer>
+                LedgerLens AI · Financial Digital Twin · Synthetic demonstration data
+            </footer>
+
+        </main>
+    </div>
+
+    <script src="js/dashboard.js"></script>
+</body>
+</html>

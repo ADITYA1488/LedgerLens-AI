@@ -11,11 +11,16 @@
 __pycache__/
 *.py[cod]
 .ipynb_checkpoints/
+.pytest_cache/
 .venv/
 venv/
 data/
 models/
 outputs/
+*.db
+*.sqlite
+*.sqlite3
+*.log
 
 # Keep reproducible experiment summaries
 !experiments/

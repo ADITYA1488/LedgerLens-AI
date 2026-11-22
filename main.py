@@ -4,7 +4,7 @@ from pathlib import Path
 from datetime import datetime
 import os
 import io
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 import numpy as np
 import pandas as pd
 from fastapi import FastAPI, HTTPException, Request
@@ -54,6 +54,11 @@ MODEL_MAP = {
 }
 
 SUPPORTED_ENTITIES = {"LOG", "MFG", "RET"}
+
+
+class AnalysisRequest(BaseModel):
+    query: str = Field(..., min_length=3, max_length=1000)
+    entity: str = Field("LOG", min_length=3, max_length=3, pattern="^(LOG|MFG|RET)$")
 
 app = FastAPI(
     title="LedgerLens AI API",
@@ -331,6 +336,83 @@ def health():
     }
 
 
+@app.post("/analyze")
+def analyze(request: AnalysisRequest):
+    """Run a full, evidence-based analysis through the existing agent graph."""
+    try:
+        query = request.query.strip()
+        if len(query) < 3:
+            raise HTTPException(422, "Query must contain at least 3 non-whitespace characters.")
+
+        # Agent nodes import analytics helpers from main, so defer this import
+        # until the application module has finished initializing.
+        from backend.agents.graph import ledgerlens_graph
+
+        result = ledgerlens_graph.invoke({
+            "user_query": f"Comprehensive analysis: {query}",
+            "entity": request.entity,
+            "agent_trace": [],
+            "errors": [],
+            "evidence": [],
+            "analyst_findings": [],
+            "forecast_findings": [],
+            "risk_findings": [],
+            "investigation_findings": [],
+            "proposed_actions": [],
+            "agent_execution_count": 0,
+            "max_agent_executions": 5,
+            "execution_budget_exceeded": False,
+        })
+
+        findings = {
+            "financial_analysis": result.get("analyst_findings", []),
+            "forecast": result.get("forecast_findings", []),
+            "risks": result.get("risk_findings", []),
+            "investigation": result.get("investigation_findings", []),
+            "actions": result.get("proposed_actions", []),
+        }
+        completed = any(
+            item.get("status") == "success"
+            for group in findings.values()
+            for item in group
+            if isinstance(item, dict)
+        )
+        has_agent_errors = bool(result.get("errors")) or any(
+            item.get("status") == "error"
+            for group in findings.values()
+            for item in group
+            if isinstance(item, dict)
+        )
+        for group in findings.values():
+            for item in group:
+                if isinstance(item, dict):
+                    # Agent exception strings can contain provider details or local paths.
+                    item.pop("error", None)
+        return {
+            "entity": request.entity,
+            "query": query,
+            "status": (
+                "partial" if completed and has_agent_errors
+                else "completed" if completed
+                else "failed"
+            ),
+            "findings": findings,
+            "trace": result.get("agent_trace", []),
+            "errors": ([
+                "One or more analysis steps could not be completed."
+            ] if has_agent_errors else []) if completed else [
+                "Analysis could not be completed with the available data or configuration."
+            ],
+            "execution_count": result.get("agent_execution_count", 0),
+            "execution_duration_ms": result.get("execution_duration_ms", 0),
+        }
+    except HTTPException:
+        raise
+    except Exception as exc:
+        # Keep internal paths, provider errors, and configuration details out of API responses.
+        raise HTTPException(500, "Analysis service is temporarily unavailable.") from exc
+
+
 @app.get(
     "/forecast/{entity}/{target}",
     response_model=ForecastResponse
@@ -393,6 +475,37 @@ def get_forecast(entity: str, target: str):
             for date, value in result["forecast"].items()
         ]
 
+        # Forecast period classification
+        forecast_date = datetime.strptime(
+            forecast_points[0].period, "%Y-%m-%d"
+        )
+
+        forecast_month = (forecast_date.year, forecast_date.month)
+        current_month = (datetime.now().year, datetime.now().month)
+
+        if forecast_month < current_month:
+            forecast_status = "historical_forecast"
+        elif forecast_month == current_month:
+            forecast_status = "current_period_estimate"
+        else:
+            forecast_status = "future_forecast"
+
+        # Underlying data freshness
+        training_date = datetime.strptime(
+            str(series.index[-1].date()), "%Y-%m-%d"
+        )
+
+        months_behind = (
+                (datetime.now().year - training_date.year) * 12
+                + datetime.now().month - training_date.month
+        )
+
+        data_freshness = (
+            "current"
+            if months_behind <= 0
+            else f"{months_behind} months behind"
+        )
+
         return ForecastResponse(
             entity=entity,
             target=target_column,
@@ -402,19 +515,21 @@ def get_forecast(entity: str, target: str):
             metadata=ForecastMetadata(
                 dataset="DD-WCP-003",
                 dataset_type="synthetic",
-                currency="USD",
-                training_end=str(series.index[-1].date())
-            )
+                currency="INR",
+                training_end=str(series.index[-1].date()),
+                forecast_status=forecast_status,
+                data_freshness=data_freshness,
+            ),
         )
 
     except FileNotFoundError as exc:
-        raise HTTPException(503, str(exc))
+        raise HTTPException(503, "Required financial data is unavailable.") from exc
 
     except HTTPException:
         raise
 
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(500, "Forecast service is temporarily unavailable.") from exc
 
 
 
@@ -487,16 +602,21 @@ def get_entity_analytics(entity: str):
         }
 
     except FileNotFoundError as exc:
-        raise HTTPException(status_code=503, detail=str(exc))
+        raise HTTPException(
+            status_code=503,
+            detail="Required financial data is unavailable."
+        ) from exc
 
     except HTTPException:
         raise
 
     except Exception as exc:
-        raise HTTPException(status_code=500, detail=str(exc))
+        raise HTTPException(
+            status_code=500,
+            detail="Analytics service is temporarily unavailable."
+        ) from exc
 
 
-@app.get("/actions/{entity}")
 @app.get("/actions/{entity}")
 def get_financial_actions(entity: str):
     entity = entity.upper()
@@ -555,10 +675,10 @@ def get_financial_actions(entity: str):
         }
 
     except FileNotFoundError as exc:
-        raise HTTPException(503, str(exc))
+        raise HTTPException(503, "Required financial data is unavailable.") from exc
 
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(500, "Action service is temporarily unavailable.") from exc
 
 class ActionStatusUpdate(BaseModel):
     status: str
@@ -590,7 +710,7 @@ def change_action_status(action_id: str, payload: ActionStatusUpdate):
         raise
 
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(500, "Action update failed.") from exc
 
 @app.get("/actions/{action_id}/history")
 def get_action_history_endpoint(action_id: str):
@@ -604,4 +724,4 @@ def get_action_history_endpoint(action_id: str):
         }
 
     except Exception as exc:
-        raise HTTPException(500, str(exc))
+        raise HTTPException(500, "Action history is temporarily unavailable.") from exc

@@ -34,7 +34,6 @@
 
             <div class="sidebar-bottom">
                 <div class="workspace-label">SYSTEM</div>
-                <a href="#" class="nav-item">⚙ <span>Settings</span></a>
                 <div class="profile">
                     <div class="avatar">A</div>
                     <div>
@@ -55,7 +54,9 @@
 
                 <div class="topbar-actions">
                     <span class="demo-badge">SYNTHETIC DEMO DATA</span>
-                    <button class="date-button">September 2026 ▾</button>
+                    <span class="date-button" title="Latest available dataset period">
+    September 2026
+</span>
                 </div>
             </header>
 
@@ -97,6 +98,37 @@
                     <span class="kpi-footnote">Model-generated forecast</span>
                 </article>
             </section>
+
+            <!-- AI FINANCIAL ANALYSIS -->
+<section class="panel ai-analysis-panel" id="aiAnalysisPanel">
+    <div class="panel-header">
+        <div>
+            <h3>AI Financial Investigation</h3>
+            <p>Multi-agent financial analysis, risk detection, and decision support</p>
+        </div>
+        <span class="demo-badge">MULTI-AGENT AI</span>
+    </div>
+
+    <div class="ai-analysis-input">
+        <textarea
+            id="aiQueryInput"
+            rows="3"
+            placeholder="Ask LedgerLens to investigate your financial performance, identify risks, analyze trends, or recommend actions..."
+        >Analyze the financial performance of LOG. Identify important trends, risks, and actionable recommendations.</textarea>
+
+        <button id="runAiAnalysisBtn" class="primary-button">
+            Run AI Analysis
+        </button>
+    </div>
+
+    <div id="aiAnalysisStatus" class="ai-analysis-status" hidden></div>
+
+    <div id="aiAnalysisResults" class="ai-analysis-results">
+        <div class="insight-placeholder">
+            Run an AI investigation to generate financial findings and risk assessments.
+        </div>
+    </div>
+</section>
 
             <section class="content-grid">
                 <article class="panel forecast-panel">
@@ -298,16 +330,278 @@
     <div id="scenarioExplanation" class="insight-placeholder"></div>
 </section>
 
-<!-- RECEIVABLES / PAYABLES PLACEHOLDER -->
+<!-- RECEIVABLES / PAYABLES WORKSPACES -->
 <section class="panel view-page" id="placeholderPage" hidden>
+
     <div class="panel-header">
         <div>
             <h3 id="placeholderTitle">Financial Workspace</h3>
-            <p id="placeholderDescription">
-                Upload invoice-level records to enable detailed analysis.
-            </p>
+            <p id="placeholderDescription"></p>
         </div>
     </div>
+
+    <!-- RECEIVABLES -->
+    <div id="receivablesContent" hidden>
+
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <span class="kpi-label">TOTAL RECEIVABLES</span>
+                <h2>₹12,80,000</h2>
+                <span class="kpi-footnote">Illustrative outstanding balance</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">OVERDUE</span>
+                <h2>₹3,20,000</h2>
+                <span class="kpi-footnote">Past due invoices</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">DUE THIS WEEK</span>
+                <h2>₹2,40,000</h2>
+                <span class="kpi-footnote">Expected collections</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">AVG. COLLECTION PERIOD</span>
+                <h2>42 Days</h2>
+                <span class="kpi-footnote">Illustrative collection cycle</span>
+            </div>
+        </div>
+
+        <div class="content-grid">
+
+            <div class="panel">
+                <h3>Receivables Aging</h3>
+
+                <div class="insight-placeholder">
+                    <strong>Current</strong>
+                    <span>₹5,40,000</span>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>1–30 Days Overdue</strong>
+                    <span>₹2,80,000</span>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>31–60 Days Overdue</strong>
+                    <span>₹2,10,000</span>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>60+ Days Overdue</strong>
+                    <span>₹2,50,000</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Collection Priorities</h3>
+
+                <div class="insight-placeholder">
+                    <strong>High Priority</strong>
+                    <p>Follow up on invoices overdue beyond 60 days.</p>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Medium Priority</strong>
+                    <p>Review outstanding balances between 31–60 days.</p>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Upcoming Collections</strong>
+                    <p>Confirm payment commitments for invoices due this week.</p>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="panel">
+            <h3>Outstanding Customer Invoices</h3>
+
+            <div style="overflow-x:auto">
+                <table class="finance-table">
+                    <thead>
+                        <tr>
+                            <th>Customer</th>
+                            <th>Invoice</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>Customer Alpha</td>
+                            <td>INV-1042</td>
+                            <td>₹1,25,000</td>
+                            <td>10 Nov 2026</td>
+                            <td><span class="status-overdue">Overdue</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Customer Beta</td>
+                            <td>INV-1048</td>
+                            <td>₹85,000</td>
+                            <td>18 Nov 2026</td>
+                            <td><span class="status-overdue">Overdue</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Customer Gamma</td>
+                            <td>INV-1053</td>
+                            <td>₹2,40,000</td>
+                            <td>27 Nov 2026</td>
+                            <td><span class="status-upcoming">Upcoming</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Customer Delta</td>
+                            <td>INV-1059</td>
+                            <td>₹1,60,000</td>
+                            <td>30 Nov 2026</td>
+                            <td><span class="status-upcoming">Upcoming</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+
+    <!-- PAYABLES -->
+    <div id="payablesContent" hidden>
+
+        <div class="kpi-grid">
+            <div class="kpi-card">
+                <span class="kpi-label">TOTAL PAYABLES</span>
+                <h2>₹9,60,000</h2>
+                <span class="kpi-footnote">Illustrative supplier obligations</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">OVERDUE PAYMENTS</span>
+                <h2>₹1,80,000</h2>
+                <span class="kpi-footnote">Payments past due</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">DUE NEXT 7 DAYS</span>
+                <h2>₹3,15,000</h2>
+                <span class="kpi-footnote">Upcoming cash requirement</span>
+            </div>
+
+            <div class="kpi-card">
+                <span class="kpi-label">DUE THIS MONTH</span>
+                <h2>₹6,40,000</h2>
+                <span class="kpi-footnote">Scheduled obligations</span>
+            </div>
+        </div>
+
+        <div class="content-grid">
+
+            <div class="panel">
+                <h3>Payment Overview</h3>
+
+                <div class="insight-placeholder">
+                    <strong>Overdue</strong>
+                    <span>₹1,80,000</span>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Due within 7 days</strong>
+                    <span>₹3,15,000</span>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Due within 30 days</strong>
+                    <span>₹4,65,000</span>
+                </div>
+            </div>
+
+            <div class="panel">
+                <h3>Payment Priorities</h3>
+
+                <div class="insight-placeholder">
+                    <strong>Immediate Review</strong>
+                    <p>Review overdue supplier obligations.</p>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Cash Planning</strong>
+                    <p>Plan cash availability for upcoming payment commitments.</p>
+                </div>
+
+                <div class="insight-placeholder">
+                    <strong>Supplier Risk</strong>
+                    <p>Prioritize critical suppliers to reduce disruption risk.</p>
+                </div>
+            </div>
+
+        </div>
+
+        <div class="panel">
+            <h3>Upcoming Supplier Payments</h3>
+
+            <div style="overflow-x:auto">
+                <table class="finance-table">
+                    <thead>
+                        <tr>
+                            <th>Supplier</th>
+                            <th>Invoice</th>
+                            <th>Amount</th>
+                            <th>Due Date</th>
+                            <th>Status</th>
+                        </tr>
+                    </thead>
+
+                    <tbody>
+                        <tr>
+                            <td>Supplier Alpha</td>
+                            <td>BILL-2081</td>
+                            <td>₹1,80,000</td>
+                            <td>19 Nov 2026</td>
+                            <td><span class="status-overdue">Overdue</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Supplier Beta</td>
+                            <td>BILL-2086</td>
+                            <td>₹1,35,000</td>
+                            <td>24 Nov 2026</td>
+                            <td><span class="status-upcoming">Upcoming</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Supplier Gamma</td>
+                            <td>BILL-2090</td>
+                            <td>₹1,80,000</td>
+                            <td>26 Nov 2026</td>
+                            <td><span class="status-upcoming">Upcoming</span></td>
+                        </tr>
+
+                        <tr>
+                            <td>Supplier Delta</td>
+                            <td>BILL-2094</td>
+                            <td>₹2,20,000</td>
+                            <td>30 Nov 2026</td>
+                            <td><span class="status-upcoming">Upcoming</span></td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+
+    </div>
+
+    <div class="insight-placeholder" style="margin-top:16px">
+        <strong>DEMO DATA NOTICE</strong>
+        All invoice records and amounts shown in this workspace are synthetic
+        illustrative data. They are not derived from actual invoice uploads.
+    </div>
+
 </section>
             <footer>
                 LedgerLens AI · Financial Digital Twin · Synthetic demonstration data
@@ -317,5 +611,37 @@
     </div>
 
     <script src="js/dashboard.js"></script>
+    <script src="js/ai-analysis.js"></script>
+
+<!-- LedgerLens AI Chat -->
+<div id="chat-widget">
+    <button id="chat-toggle">💬 LedgerLens AI</button>
+
+    <div id="chat-panel" class="chat-hidden">
+        <div class="chat-header">
+            <span>LedgerLens Copilot</span>
+            <button id="chat-close">×</button>
+        </div>
+
+        <div id="chat-messages">
+            <div class="bot-message">
+                Hello! Ask me about your financial data, risks, or insights.
+            </div>
+        </div>
+
+        <div class="chat-input-area">
+            <input
+                type="text"
+                id="chat-input"
+                placeholder="Ask about your finances..."
+            />
+            <button id="chat-send">➤</button>
+        </div>
+    </div>
+</div>
+
+<script src="js/chatbot.js"></script>
 </body>
 </html>
+
+

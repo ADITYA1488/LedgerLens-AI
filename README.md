@@ -1,64 +1,57 @@
 # LedgerLens AI
 
-**Financial Digital Twin and Working Capital Intelligence for Indian MSMEs**
+LedgerLens AI is a financial intelligence demo for exploring working-capital trends, forecasts, heuristic risk indicators, and investigation actions across three business entities.
 
-LedgerLens AI aims to help manufacturing and trading MSMEs understand
-cash-flow patterns, working-capital requirements and financial risks.
+## Features and architecture
 
-## Current implementation
+- Static dashboard in `frontend/`, with Chart.js trend and forecast chart.
+- FastAPI service in `main.py` for analytics, forecasts, actions, dataset upload, and multi-agent analysis.
+- LangGraph workflow in `backend/agents/`; Gemini reasoning is optional and uses deterministic, evidence-based analysis when no key is configured.
+- Optional Groq-backed chat service in `backend/api/main.py`.
+- CSV data and model selection are loaded from the configured paths below.
 
-The initial forecasting foundation includes:
+## Run locally
 
-- `forecasting.py` — Holt-Winters and moving-average forecasting.
-- `evaluation.py` — MAE, RMSE, MAPE, sMAPE and forecast bias.
-- `intervals.py` — prediction intervals and empirical coverage.
-- `model_registry.py` — model serialization and metadata.
-- `ledgerlens_pipeline.py` — integrated forecasting workflow.
+Use Python 3.10 or later. From the repository root, install dependencies and copy the environment template:
 
-## Current experiment
+```powershell
+python -m pip install -r requirements.txt
+Copy-Item .env.example .env
+```
 
-The initial experiments use the synthetic DD-WCP-003 working-capital
-dataset from Findi360.
+Place `DD-WCP-003_FactMonthlyPL.csv` in `data/dataset/`, or set `LEDGERLENS_DATA_DIR` to its containing directory. Then run these in separate terminals from the repository root:
 
-The dataset contains synthetic USD-denominated financial records.
-It is not real Indian MSME transaction data.
+```powershell
+python -m uvicorn main:app --reload --host 127.0.0.1 --port 8000
+python -m uvicorn backend.api.main:app --reload --host 127.0.0.1 --port 8001
+python -m http.server 5500 --directory frontend
+```
 
-RET Revenue forecasting experiment:
-- Training: January 2023 – November 2025.
-- Validation: December 2025 – September 2026.
-- Evaluation: expanding-window, one-step-ahead.
-- Holt-Winters MAPE: 3.20%.
-- Moving-average baseline MAPE: 7.11%.
+Open `http://127.0.0.1:5500`. The dashboard and analysis API use port 8000; the optional chat widget uses port 8001. Check `http://127.0.0.1:8000/health` and `http://127.0.0.1:8001/health` for service health.
 
-These are preliminary results on synthetic data, not evidence of
-performance on real Indian businesses.
+## Environment variables
 
-## Technology
+- `LEDGERLENS_DATA_DIR`: dataset directory; defaults to `data/dataset`.
+- `LEDGERLENS_SELECTION_FILE`: model-selection CSV; defaults to `experiments/selected_forecasting_models.csv`.
+- `LEDGERLENS_PROJECT_ROOT`: optional project root override.
+- `GEMINI_API_KEY`: optional; enables Gemini-backed analysis. Without it, the analysis workflow uses its deterministic fallback and identifies that mode in the result.
+- `GEMINI_MODEL`: optional model name; defaults to `gemini-2.5-flash`.
+- `LLM_TEMPERATURE`: optional model temperature; defaults to `0.2`.
+- `GROQ_API_KEY`: required only when using chat.
 
-- Python
-- Pandas and NumPy
-- Statsmodels
-- Joblib
+Keep real keys in the ignored `.env` file. `.env.example` contains placeholders only.
 
-## Planned development
+## Demo data and limitations
 
-1. Multi-entity financial forecasting.
-2. Cash-flow and working-capital analytics.
-3. Financial data ingestion and normalization.
-4. Scenario simulation and liquidity intelligence.
-5. FastAPI backend.
-6. Integration with SYNTHEGRA through its API.
+The bundled DD-WCP-003 data is synthetic demonstration data, not real company transactions. The dashboard labels the demo accordingly. Risk scores are heuristic indicators, not probabilities. Forecasts and metrics are demonstrations and are not financial advice or validated predictions for a real business.
 
-## Project structure
+## 60-second demo walkthrough
 
-This is an early experimental checkpoint. Production API integration,
-real-world validation and deployment are not yet complete.
+1. Show the dashboard KPI cards and the synthetic-data badge (10 seconds).
+2. Point out the historical trend and forecast line; switch entities or forecast metrics (15 seconds).
+3. Run the suggested AI investigation and show the financial snapshot and trends (15 seconds).
+4. Scroll through risk indicators, recommended investigation steps, and the agent trace (20 seconds).
 
-## Data and security
+## Submission description
 
-Datasets, trained model artifacts, credentials and private financial
-records must not be committed to this repository.
-
-## License
-
-To be decided.
+LedgerLens AI is an explainable working-capital intelligence demo that combines historical financial analytics, forecasting, multi-agent investigation, and actionable heuristic risk indicators in one dashboard. It is built to help small and midsize businesses explore cash-flow drivers while making evidence, assumptions, and synthetic-data limitations visible.

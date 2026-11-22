@@ -21,6 +21,10 @@ class ForecastMetadata(BaseModel):
     dataset_type: str
     currency: str
     training_end: Optional[str] = None
+    forecast_status: Optional[str] = None
+    data_freshness: Optional[str] = None
+    forecast_status = forecast_status,
+    data_freshness = data_freshness,
 
 
 class ForecastResponse(BaseModel):

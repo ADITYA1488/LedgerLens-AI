@@ -145,16 +145,15 @@ window.setLedgerLensActionStatus = function(entity, actionId, status) {
     loadActionCenter(entity);
 };
 
-
 const entitySelect = document.getElementById("entitySelect");
 const forecastTargetSelect = document.getElementById("forecastTargetSelect");
 
 function formatCurrency(value) {
     if (value == null || !Number.isFinite(Number(value))) return "—";
 
-    return new Intl.NumberFormat("en-US", {
+    return new Intl.NumberFormat("en-IN", {
         style: "currency",
-        currency: "USD",
+        currency: "INR",
         maximumFractionDigits: 0
     }).format(value);
 }
@@ -309,7 +308,7 @@ function updateChart(entity) {
                         beginAtZero: false,
                         ticks: {
                             callback: value =>
-                                "$" + Number(value).toLocaleString("en-US")
+                               "₹" + Number(value).toLocaleString("en-IN")
                         },
                         grid: {
                             color: "#edf0f3"
@@ -325,6 +324,7 @@ function updateChart(entity) {
         }
     );
 }
+
 function updateInsights(entity) {
     const analytics = analyticsCache[entity];
     const target = forecastTargetSelect.value;
@@ -334,6 +334,7 @@ function updateInsights(entity) {
 
     const kpis = analytics.kpis;
     const point = forecast?.forecast?.[0];
+    const metadata = forecast?.metadata || {};
 
     const metricLabels = {
         Revenue: "Revenue",
@@ -341,29 +342,65 @@ function updateInsights(entity) {
         SupplierInvoices: "Supplier Invoices"
     };
 
+    const statusLabels = {
+        historical_forecast: "Historical Forecast",
+        current_period_estimate: "Current Period Estimate",
+        future_forecast: "Future Forecast"
+    };
+
+    const forecastStatus =
+        statusLabels[metadata.forecast_status] ||
+        "Status unavailable";
+
     document.getElementById("insightsContent").innerHTML = `
         <div class="insight-placeholder">
             <strong>Gross profit</strong><br>
             ${formatCurrency(kpis.gross_profit)}
         </div>
+
         <div class="insight-placeholder">
             <strong>Gross margin</strong><br>
             ${Number(kpis.gross_margin_pct).toFixed(2)}%
         </div>
+
         <div class="insight-placeholder">
             <strong>${metricLabels[target]} forecasting model</strong><br>
-            ${forecast?.model || "Unavailable"}
+            ${escapeHTML(forecast?.model || "Unavailable")}
         </div>
+
         <div class="insight-placeholder">
             <strong>Forecast period</strong><br>
-            ${point?.period || "Unavailable"}
+            ${escapeHTML(point?.period || "Unavailable")}
         </div>
+
         <div class="insight-placeholder">
             <strong>Predicted ${metricLabels[target]}</strong><br>
             ${point ? formatCurrency(point.predicted_value) : "Unavailable"}
         </div>
+
+        <div class="insight-placeholder">
+            <strong>Forecast classification</strong><br>
+            ${escapeHTML(forecastStatus)}
+        </div>
+
+        <div class="insight-placeholder">
+            <strong>Data freshness</strong><br>
+            ${escapeHTML(metadata.data_freshness || "Unavailable")}
+        </div>
+
+        <div class="insight-placeholder">
+            <strong>Training data through</strong><br>
+            ${escapeHTML(metadata.training_end || "Unavailable")}
+        </div>
+
+        <div class="insight-placeholder">
+            <strong>Dataset</strong><br>
+            ${escapeHTML(metadata.dataset || "Unavailable")}
+            (${escapeHTML(metadata.dataset_type || "Unknown")})
+        </div>
     `;
 }
+
 function updateEntityTable() {
     const tbody = document.getElementById("entityTable");
 
@@ -452,7 +489,6 @@ forecastTargetSelect.addEventListener("change", () => {
     updateChart(entity);
     updateInsights(entity);
 });
-
 
 loadDashboard();
 
@@ -555,16 +591,32 @@ function switchWorkspace(view) {
         const title = document.getElementById('placeholderTitle');
         const description = document.getElementById('placeholderDescription');
 
+        const receivablesContent =
+            document.getElementById('receivablesContent');
+
+        const payablesContent =
+            document.getElementById('payablesContent');
+
+        const isReceivables = view === 'receivables';
+
         if (title) {
-            title.textContent =
-                view === 'receivables'
-                    ? 'Receivables Workspace'
-                    : 'Payables Workspace';
+            title.textContent = isReceivables
+                ? 'Receivables Workspace'
+                : 'Payables Workspace';
         }
 
         if (description) {
-            description.textContent =
-                'Upload invoice-level records to enable aging, overdue balances, and counterparty analysis. These analytics are not calculated from the monthly P&L file.';
+            description.textContent = isReceivables
+                ? 'Monitor customer outstanding balances, collection timelines, and overdue exposure.'
+                : 'Monitor supplier obligations, upcoming payments, and cash requirements.';
+        }
+
+        if (receivablesContent) {
+            receivablesContent.hidden = !isReceivables;
+        }
+
+        if (payablesContent) {
+            payablesContent.hidden = isReceivables;
         }
     }
 
@@ -588,78 +640,150 @@ navLinks.forEach(link => {
 
 // Start on Command Center
 switchWorkspace('command');
+
 function getNumber(id) {
     const value = Number(document.getElementById(id).value);
     return Number.isFinite(value) && value >= 0 ? value : 0;
 }
-function formatDays(value) { return `${value.toFixed(1)} days`; }
+
+function formatDays(value) {
+    return `${value.toFixed(1)} days`;
+}
+
 function calculateWorkingCapital() {
     const revenue = getNumber('wcRevenue');
     const cogs = getNumber('wcCogs');
     const dso = getNumber('wcDso');
     const dio = getNumber('wcDio');
     const dpo = getNumber('wcDpo');
+
     const receivables = revenue / 365 * dso;
     const inventory = cogs / 365 * dio;
     const payables = cogs / 365 * dpo;
     const ccc = dso + dio - dpo;
     const netWC = receivables + inventory - payables;
-    document.getElementById('wcReceivables').textContent = formatCurrency(receivables);
-    document.getElementById('wcInventory').textContent = formatCurrency(inventory);
-    document.getElementById('wcPayables').textContent = formatCurrency(payables);
-    document.getElementById('wcCcc').textContent = formatDays(ccc);
-    document.getElementById('wcNetWorkingCapital').textContent = `Estimated net working capital: ${formatCurrency(netWC)} (receivables + inventory − payables).`;
+
+    document.getElementById('wcReceivables').textContent =
+        formatCurrency(receivables);
+
+    document.getElementById('wcInventory').textContent =
+        formatCurrency(inventory);
+
+    document.getElementById('wcPayables').textContent =
+        formatCurrency(payables);
+
+    document.getElementById('wcCcc').textContent =
+        formatDays(ccc);
+
+    document.getElementById('wcNetWorkingCapital').textContent =
+        `Estimated net working capital: ${formatCurrency(netWC)} (receivables + inventory − payables).`;
 }
-document.getElementById('calculateWCButton').addEventListener('click', calculateWorkingCapital);
+
+document.getElementById('calculateWCButton')
+    .addEventListener('click', calculateWorkingCapital);
 
 function runScenario() {
     const revenue = getNumber('simRevenue');
     const cogs = getNumber('simCogs');
-    const dso0 = getNumber('simDsoBase'), dso1 = getNumber('simDsoNew');
-    const dio0 = getNumber('simDioBase'), dio1 = getNumber('simDioNew');
-    const dpo0 = getNumber('simDpoBase'), dpo1 = getNumber('simDpoNew');
-    const dailyRevenue = revenue / 365, dailyCogs = cogs / 365;
-    const baseCCC = dso0 + dio0 - dpo0, newCCC = dso1 + dio1 - dpo1;
-    const baseNWC = dailyRevenue*dso0 + dailyCogs*dio0 - dailyCogs*dpo0;
-    const scenarioNWC = dailyRevenue*dso1 + dailyCogs*dio1 - dailyCogs*dpo1;
+
+    const dso0 = getNumber('simDsoBase');
+    const dso1 = getNumber('simDsoNew');
+
+    const dio0 = getNumber('simDioBase');
+    const dio1 = getNumber('simDioNew');
+
+    const dpo0 = getNumber('simDpoBase');
+    const dpo1 = getNumber('simDpoNew');
+
+    const dailyRevenue = revenue / 365;
+    const dailyCogs = cogs / 365;
+
+    const baseCCC = dso0 + dio0 - dpo0;
+    const newCCC = dso1 + dio1 - dpo1;
+
+    const baseNWC =
+        dailyRevenue * dso0 +
+        dailyCogs * dio0 -
+        dailyCogs * dpo0;
+
+    const scenarioNWC =
+        dailyRevenue * dso1 +
+        dailyCogs * dio1 -
+        dailyCogs * dpo1;
+
     const release = baseNWC - scenarioNWC;
-    document.getElementById('simCashImpact').textContent = `${release >= 0 ? '+' : '−'}${formatCurrency(Math.abs(release))}`;
-    document.getElementById('simCccBase').textContent = formatDays(baseCCC);
-    document.getElementById('simCccNew').textContent = formatDays(newCCC);
-    document.getElementById('scenarioExplanation').textContent = release >= 0
-        ? `This scenario reduces estimated net working capital by ${formatCurrency(release)}, potentially releasing cash. Cash release is an estimate, not guaranteed cash flow.`
-        : `This scenario increases estimated net working capital by ${formatCurrency(Math.abs(release))}, potentially consuming cash. Cash impact is an estimate.`;
+
+    document.getElementById('simCashImpact').textContent =
+        `${release >= 0 ? '+' : '−'}${formatCurrency(Math.abs(release))}`;
+
+    document.getElementById('simCccBase').textContent =
+        formatDays(baseCCC);
+
+    document.getElementById('simCccNew').textContent =
+        formatDays(newCCC);
+
+    document.getElementById('scenarioExplanation').textContent =
+        release >= 0
+            ? `This scenario reduces estimated net working capital by ${formatCurrency(release)}, potentially releasing cash. Cash release is an estimate, not guaranteed cash flow.`
+            : `This scenario increases estimated net working capital by ${formatCurrency(Math.abs(release))}, potentially consuming cash. Cash impact is an estimate.`;
 }
-document.getElementById('runScenarioButton').addEventListener('click', runScenario);
+
+document.getElementById('runScenarioButton')
+    .addEventListener('click', runScenario);
+
 calculateWorkingCapital();
 runScenario();
 
-
 // Manual CSV refresh: validate and replace the active monthly P&L dataset through the API.
-document.getElementById('uploadDatasetButton').addEventListener('click', async () => {
-    const input = document.getElementById('datasetFile');
-    const status = document.getElementById('uploadStatus');
-    const button = document.getElementById('uploadDatasetButton');
-    const file = input.files?.[0];
-    if (!file) { status.textContent = 'Choose a CSV file first.'; return; }
-    if (!file.name.toLowerCase().endsWith('.csv')) { status.textContent = 'Only CSV files are supported.'; return; }
-    button.disabled = true;
-    status.textContent = 'Validating and importing…';
-    try {
-        const response = await fetch(`${API_BASE}/data/upload`, {
-            method: 'POST',
-            headers: {'Content-Type': 'text/csv'},
-            body: await file.text()
-        });
-        const result = await response.json();
-        if (!response.ok) throw new Error(result.detail || `Import failed (${response.status})`);
-        status.textContent = `Imported ${result.rows} rows · latest ${result.latest_period}`;
-        analyticsCache = {};
-        forecastCache = {};
-        await loadDashboard();
-    } catch (error) {
-        status.textContent = `Import failed: ${error.message}`;
-    } finally {
-        button.disabled = false;
-    }
-});
+const uploadDatasetButton = document.getElementById('uploadDatasetButton');
+
+if (uploadDatasetButton) {
+    uploadDatasetButton.addEventListener('click', async () => {
+        const input = document.getElementById('datasetFile');
+        const status = document.getElementById('uploadStatus');
+        const button = document.getElementById('uploadDatasetButton');
+        const file = input.files?.[0];
+
+        if (!file) {
+            status.textContent = 'Choose a CSV file first.';
+            return;
+        }
+
+        if (!file.name.toLowerCase().endsWith('.csv')) {
+            status.textContent = 'Only CSV files are supported.';
+            return;
+        }
+
+        button.disabled = true;
+        status.textContent = 'Validating and importing…';
+
+        try {
+            const response = await fetch(`${API_BASE}/data/upload`, {
+                method: 'POST',
+                headers: {'Content-Type': 'text/csv'},
+                body: await file.text()
+            });
+
+            const result = await response.json();
+
+            if (!response.ok) {
+                throw new Error(result.detail || `Import failed (${response.status})`);
+            }
+
+            status.textContent =
+                `Imported ${result.rows} rows · latest ${result.latest_period}`;
+
+            analyticsCache = {};
+            forecastCache = {};
+
+            await loadDashboard();
+
+        } catch (error) {
+            status.textContent = `Import failed: ${error.message}`;
+
+        } finally {
+            button.disabled = false;
+        }
+    });
+}
+

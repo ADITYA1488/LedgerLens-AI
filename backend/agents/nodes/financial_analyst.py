@@ -19,7 +19,7 @@ def financial_analyst_node(state: LedgerLensState) -> dict[str, Any]:
         context = build_financial_context(analytics)
 
         # Step 3: Perform structured financial reasoning
-        analysis = analyze_financial_evidence(
+        analysis, reasoning_mode, fallback_reason = analyze_financial_evidence(
             context,
             use_llm=True,
         )
@@ -35,11 +35,8 @@ def financial_analyst_node(state: LedgerLensState) -> dict[str, Any]:
             "metrics": context.get("current_financials", {}),
             "context": context,
             "analysis": analysis_dict,
-            "reasoning_mode": (
-                "llm"
-                if analysis.analysis_status == "complete"
-                else "fallback"
-            ),
+            "reasoning_mode": reasoning_mode,
+            "fallback_reason": fallback_reason,
         }
 
         evidence = {

@@ -164,13 +164,14 @@ def deterministic_analysis(context: dict[str, Any]) -> FinancialAnalysis:
     return FinancialAnalysis.model_validate(result)
 
 
+
 def analyze_financial_evidence(
     context: dict[str, Any],
     use_llm: bool = True,
-) -> FinancialAnalysis:
+) -> tuple[FinancialAnalysis, str, str | None]:
 
     if not use_llm:
-        return deterministic_analysis(context)
+        return deterministic_analysis(context), "deterministic", None
 
     try:
         llm = get_llm()
@@ -187,10 +188,12 @@ def analyze_financial_evidence(
         ])
 
         if isinstance(response, FinancialAnalysis):
-            return response
+            analysis = response
+        else:
+            analysis = FinancialAnalysis.model_validate(response)
 
-        return FinancialAnalysis.model_validate(response)
+        return analysis, "gemini", None
 
-    except Exception:
-        # Safe fallback. We do not misrepresent fallback output as LLM output.
-        return deterministic_analysis(context)
+    except Exception as exc:
+        fallback_reason = type(exc).__name__
+        return deterministic_analysis(context), "deterministic_fallback", fallback_reason

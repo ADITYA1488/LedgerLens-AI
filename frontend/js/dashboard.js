@@ -8,25 +8,9 @@ let forecastCache = {};
 let forecastChart = null;
 
 const actionCache = {};
-const ACTION_STORAGE_KEY = "ledgerlens_action_states_v1";
-
-function getSavedActionStates() {
-    try {
-        return JSON.parse(localStorage.getItem(ACTION_STORAGE_KEY) || "{}");
-    } catch {
-        return {};
-    }
-}
-
-function saveActionState(entity, actionId, status) {
-    const states = getSavedActionStates();
-    states[`${entity}:${actionId}`] = status;
-    localStorage.setItem(ACTION_STORAGE_KEY, JSON.stringify(states));
-}
 
 function getActionState(entity, action) {
-    const states = getSavedActionStates();
-    return states[`${entity}:${action.id}`] || action.status || "open";
+    return action.status || "open";
 }
 
 function escapeHTML(value) {
@@ -52,9 +36,9 @@ async function loadActionCenter(entity) {
         actionCache[entity] = data;
 
         const actions = data.actions || [];
-        const activeActions = actions.filter(
-            action => getActionState(entity, action) === "open"
-        );
+        const activeActions = actions.filter(action =>
+    ["open", "in_progress"].includes(getActionState(entity, action))
+);
 
         counter.textContent = `${activeActions.length} active`;
 
@@ -103,27 +87,38 @@ async function loadActionCenter(entity) {
                     </div>
 
                     <div class="action-buttons">
-                        ${
-                            status === "open"
-                            ? `
-                                <button class="action-complete-btn"
-                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'completed')">
-                                    ✓ Mark Complete
-                                </button>
+    ${
+        status === "open"
+        ? `
+            <button class="action-complete-btn"
+                onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'in_progress')">
+                Start Investigation
+            </button>
+        `
+        : ""
+    }
 
-                                <button class="action-dismiss-btn"
-                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'dismissed')">
-                                    Dismiss
-                                </button>
-                            `
-                            : `
-                                <button class="action-restore-btn"
-                                    onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'open')">
-                                    Reopen
-                                </button>
-                            `
-                        }
-                    </div>
+    ${
+        ["open", "in_progress"].includes(status)
+        ? `
+            <button class="action-complete-btn"
+                onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'completed')">
+                Mark Complete
+            </button>
+
+            <button class="action-dismiss-btn"
+                onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'dismissed')">
+                Dismiss
+            </button>
+        `
+        : `
+            <button class="action-restore-btn"
+                onclick="setLedgerLensActionStatus('${entity}', '${action.id}', 'open')">
+                Reopen
+            </button>
+        `
+    }
+</div>
                 </article>
             `;
         }).join("");
@@ -140,9 +135,18 @@ async function loadActionCenter(entity) {
     }
 }
 
-window.setLedgerLensActionStatus = function(entity, actionId, status) {
-    saveActionState(entity, actionId, status);
-    loadActionCenter(entity);
+window.setLedgerLensActionStatus = async function(entity, actionId, status) {
+    try {
+        await apiPatch(`/actions/${encodeURIComponent(actionId)}/status`, {
+            status,
+            notes: ""
+        });
+
+        await loadActionCenter(entity);
+    } catch (error) {
+        console.error("Action status update failed:", error);
+        alert(`Could not update action status: ${error.message}`);
+    }
 };
 
 const entitySelect = document.getElementById("entitySelect");
@@ -166,6 +170,26 @@ async function apiGet(path) {
     }
 
     return response.json();
+}
+
+
+// ADD THIS BELOW apiGet()
+async function apiPatch(path, body) {
+    const response = await fetch(`${API_BASE}${path}`, {
+        method: "PATCH",
+        headers: {
+            "Content-Type": "application/json"
+        },
+        body: JSON.stringify(body)
+    });
+
+    const data = await response.json().catch(() => ({}));
+
+    if (!response.ok) {
+        throw new Error(data.detail || `${path}: HTTP ${response.status}`);
+    }
+
+    return data;
 }
 
 async function loadDashboardData(entity) {

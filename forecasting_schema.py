@@ -23,8 +23,6 @@ class ForecastMetadata(BaseModel):
     training_end: Optional[str] = None
     forecast_status: Optional[str] = None
     data_freshness: Optional[str] = None
-    forecast_status = forecast_status,
-    data_freshness = data_freshness,
 
 
 class ForecastResponse(BaseModel):

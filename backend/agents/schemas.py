@@ -19,7 +19,15 @@ class FinancialInsight(BaseModel):
     finding: str
     evidence: list[str] = Field(default_factory=list)
     implication: str
-    confidence: float = Field(ge=0.0, le=1.0)
+    confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Evidence coverage for this insight, not a calibrated probability "
+            "of correctness. Reflects the availability and completeness of "
+            "the specific supporting evidence."
+        ),
+    )
 
 
 class FinancialRecommendation(BaseModel):
@@ -45,7 +53,15 @@ class FinancialAnalysis(BaseModel):
     opportunities: list[str] = Field(default_factory=list)
     data_limitations: list[str] = Field(default_factory=list)
 
-    overall_confidence: float = Field(ge=0.0, le=1.0)
+    overall_confidence: float = Field(
+        ge=0.0,
+        le=1.0,
+        description=(
+            "Current financial KPI coverage ratio: the proportion of five "
+            "expected KPI fields available and valid. Not a probability "
+            "of analytical correctness."
+        ),
+    )
     analysis_status: Literal[
         "complete",
         "partial",

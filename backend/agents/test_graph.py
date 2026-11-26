@@ -158,6 +158,102 @@ def test_financial_analyst_node():
     print("Recommendations:", len(analysis["recommendations"]))
     print("Node validation: PASS")
 
+def test_financial_data_reliability():
+    print("\n=== Financial Data Reliability Tests ===")
+
+    # 1. Invalid numeric values must be treated as missing.
+    context = build_financial_context({
+        "entity": "TEST",
+        "kpis": {
+            "revenue": float("nan"),
+            "cost_of_sales": float("inf"),
+            "supplier_invoices": "invalid",
+            "gross_profit": 100,
+            "gross_margin_pct": 30,
+        },
+        "history": [],
+    })
+
+    financials = context["current_financials"]
+
+    assert financials["revenue"] is None
+    assert financials["cost_of_sales"] is None
+    assert financials["supplier_invoices"] is None
+
+    analysis = deterministic_analysis(context)
+    assert analysis.analysis_status == "partial"
+    assert abs(analysis.overall_confidence - 0.4) < 1e-9
+
+    print("Invalid numeric values: PASS")
+
+    # 2. No available KPI data must produce insufficient_data.
+    context = build_financial_context({
+        "entity": "TEST",
+        "kpis": {
+            "revenue": None,
+            "cost_of_sales": None,
+            "supplier_invoices": None,
+            "gross_profit": None,
+            "gross_margin_pct": None,
+        },
+        "history": [],
+    })
+
+    analysis = deterministic_analysis(context)
+
+    assert analysis.analysis_status == "insufficient_data"
+    assert analysis.overall_confidence == 0.0
+    assert not analysis.insights
+    assert analysis.data_limitations
+
+    print("All KPI values missing: PASS")
+
+    # 3. Incomplete historical values must not produce false comparisons.
+    context = build_financial_context({
+        "entity": "TEST",
+        "kpis": {
+            "revenue": 200,
+            "cost_of_sales": 120,
+            "supplier_invoices": 40,
+            "gross_profit": 80,
+            "gross_margin_pct": 40,
+        },
+        "history": [
+            {
+                "revenue": None,
+                "cost_of_sales": 100,
+                "gross_profit": 0,
+            },
+            {
+                "revenue": 200,
+                "cost_of_sales": 120,
+                "gross_profit": 80,
+            },
+        ],
+    })
+
+    comparison = context["historical_comparison"]
+
+    assert comparison["revenue_change_pct"] is None
+    assert comparison["cost_of_sales_change_pct"] == 20.0
+    assert comparison["gross_profit_change_pct"] is None
+
+    analysis = deterministic_analysis(context)
+
+    assert analysis.analysis_status == "partial"
+    assert any(
+        "historical comparisons" in item.lower()
+        for item in analysis.data_limitations
+    )
+    assert not any(
+        insight.title == "Cost growth outpacing revenue"
+        for insight in analysis.insights
+    )
+
+    print("Incomplete historical comparisons: PASS")
+    print("Financial data reliability: PASS")
+
+
 
 def test_end_to_end():
     print("\n=== End-to-End Graph Test ===")
@@ -445,6 +541,7 @@ if __name__ == "__main__":
         test_financial_context,
         test_deterministic_intelligence,
         test_financial_analyst_node,
+        test_financial_data_reliability,
         test_end_to_end,
         test_multi_agent_handoff,
         test_agent_contracts,
